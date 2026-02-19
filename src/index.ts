@@ -19,8 +19,12 @@ app.use(
 );
 
 // ---------------------------------------------------------------------------
-// Health check
+// Root / Health check
 // ---------------------------------------------------------------------------
+app.get('/', (_req, res) => {
+  res.json({ service: 'cal-sync', status: 'ok', timestamp: new Date().toISOString() });
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
