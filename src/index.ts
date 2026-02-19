@@ -3,7 +3,9 @@ import { handleGoogleWebhook } from './google/webhook';
 import { handleLineworksWebhook } from './lineworks/webhook';
 import { runPoll } from './sync/poller';
 import { startWatch } from './google/calendar';
-import { getUserConfig } from './db/firestore';
+import { renewWatch, checkAndRenewWatches } from './google/watchManager';
+import { getUserConfig, setUserConfig } from './db/firestore';
+import { UserConfig } from './types';
 import { logger } from './utils/logger';
 
 const app = express();
@@ -37,6 +39,7 @@ app.post('/webhooks/lineworks', handleLineworksWebhook);
 
 // ---------------------------------------------------------------------------
 // Polling endpoint (triggered by Cloud Scheduler)
+// Also checks and renews Google Watch channels that are about to expire.
 // ---------------------------------------------------------------------------
 app.post('/poll', async (req, res) => {
   const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
@@ -47,6 +50,11 @@ app.post('/poll', async (req, res) => {
 
   try {
     await runPoll(userId);
+
+    // Auto-renew watch channels expiring within 48h
+    const baseUrl = req.body?.baseUrl ?? `https://${req.headers.host}`;
+    await checkAndRenewWatches(baseUrl);
+
     res.json({ status: 'ok' });
   } catch (error) {
     logger.error('poll_endpoint_failed', error);
@@ -55,7 +63,48 @@ app.post('/poll', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Admin: register Google Push notification channel
+// Admin: user config management
+// ---------------------------------------------------------------------------
+app.get('/admin/config/:userId', async (req, res) => {
+  try {
+    const config = await getUserConfig(req.params.userId);
+    if (!config) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+    // Mask sensitive tokens in response
+    res.json({
+      ...config,
+      googleRefreshToken: config.googleRefreshToken ? '***' : '',
+      lineworksRefreshToken: config.lineworksRefreshToken ? '***' : '',
+    });
+  } catch (error) {
+    logger.error('admin_get_config_failed', error);
+    res.status(500).json({ error: 'Failed to get config' });
+  }
+});
+
+app.post('/admin/config', async (req, res) => {
+  const body = req.body as Partial<UserConfig>;
+  if (!body.userId || !body.googleCalendarId || !body.googleRefreshToken ||
+      !body.lineworksCalendarId || !body.lineworksRefreshToken) {
+    res.status(400).json({
+      error: 'Required fields: userId, googleCalendarId, googleRefreshToken, lineworksCalendarId, lineworksRefreshToken',
+    });
+    return;
+  }
+
+  try {
+    await setUserConfig(body as UserConfig);
+    res.json({ status: 'ok', userId: body.userId });
+  } catch (error) {
+    logger.error('admin_set_config_failed', error);
+    res.status(500).json({ error: 'Failed to save config' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin: Google Watch channel management
 // ---------------------------------------------------------------------------
 app.post('/admin/watch/start', async (req, res) => {
   const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
@@ -71,7 +120,6 @@ app.post('/admin/watch/start', async (req, res) => {
       return;
     }
 
-    const port = process.env.PORT ?? '8080';
     const baseUrl = req.body?.baseUrl ?? `https://${req.headers.host}`;
     const webhookUrl = `${baseUrl}/webhooks/google`;
 
@@ -85,6 +133,23 @@ app.post('/admin/watch/start', async (req, res) => {
   } catch (error) {
     logger.error('admin_watch_start_failed', error);
     res.status(500).json({ error: 'Failed to start watch' });
+  }
+});
+
+app.post('/admin/watch/renew', async (req, res) => {
+  const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required' });
+    return;
+  }
+
+  try {
+    const baseUrl = req.body?.baseUrl ?? `https://${req.headers.host}`;
+    await renewWatch(userId, baseUrl);
+    res.json({ status: 'ok' });
+  } catch (error) {
+    logger.error('admin_watch_renew_failed', error);
+    res.status(500).json({ error: 'Failed to renew watch' });
   }
 });
 

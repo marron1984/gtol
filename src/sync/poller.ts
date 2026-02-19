@@ -8,6 +8,7 @@ import {
   pushErrorQueue,
 } from '../db/firestore';
 import { logger } from '../utils/logger';
+import { notifyAdmin } from '../utils/notify';
 
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -202,6 +203,10 @@ async function retryErrorQueue(userId: string): Promise<void> {
           eventId: entry.eventId,
           source: entry.source,
         });
+        await notifyAdmin(
+          'Sync failed after max retries',
+          `Source: ${entry.source}\nEvent: ${entry.eventId}\nAction: ${entry.action}\nError: ${error instanceof Error ? error.message : String(error)}`
+        );
       } else {
         // Re-enqueue with incremented count
         await removeErrorQueueEntry(entry.docId);
