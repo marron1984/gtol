@@ -1,0 +1,36 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "event_mappings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "googleEventId", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "event_mappings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lineworksEventId", "order": "ASCENDING" },
+        { "fieldPath": "userId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "event_mappings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "error_queue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

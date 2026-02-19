@@ -5,6 +5,7 @@ import { runPoll } from './sync/poller';
 import { startWatch } from './google/calendar';
 import { renewWatch, checkAndRenewWatches } from './google/watchManager';
 import { getUserConfig, setUserConfig } from './db/firestore';
+import { runInitialSync } from './sync/initialSync';
 import { UserConfig } from './types';
 import { logger } from './utils/logger';
 
@@ -150,6 +151,28 @@ app.post('/admin/watch/renew', async (req, res) => {
   } catch (error) {
     logger.error('admin_watch_renew_failed', error);
     res.status(500).json({ error: 'Failed to renew watch' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Admin: initial full sync (first-time setup)
+// ---------------------------------------------------------------------------
+app.post('/admin/initial-sync', async (req, res) => {
+  const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
+  if (!userId) {
+    res.status(400).json({ error: 'userId is required' });
+    return;
+  }
+
+  const daysBack = req.body?.daysBack ?? 30;
+
+  try {
+    const result = await runInitialSync(userId, daysBack);
+    res.json({ status: 'ok', ...result });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logger.error('admin_initial_sync_failed', error);
+    res.status(500).json({ error: msg });
   }
 });
 
