@@ -8,6 +8,8 @@ import { getUserConfig, setUserConfig } from './db/firestore';
 import { runInitialSync } from './sync/initialSync';
 import { UserConfig } from './types';
 import { logger } from './utils/logger';
+import dashboardApi from './dashboard/api';
+import { dashboardHtml } from './dashboard/page';
 
 const app = express();
 
@@ -174,6 +176,16 @@ app.post('/admin/initial-sync', async (req, res) => {
     logger.error('admin_initial_sync_failed', error);
     res.status(500).json({ error: msg });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+app.use('/dashboard/api', dashboardApi);
+
+app.get('/dashboard', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html');
+  res.send(dashboardHtml());
 });
 
 // ---------------------------------------------------------------------------
