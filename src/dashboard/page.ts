@@ -5,7 +5,7 @@ export function dashboardHtml(): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cal-Sync Dashboard</title>
+<title>カレンダー同期 ダッシュボード</title>
 <style>
   :root{--bg:#0f172a;--card:#1e293b;--border:#334155;--text:#e2e8f0;--muted:#94a3b8;--accent:#38bdf8;--green:#4ade80;--yellow:#facc15;--red:#f87171;--font:system-ui,-apple-system,sans-serif}
   *{box-sizing:border-box;margin:0;padding:0}
@@ -46,51 +46,51 @@ export function dashboardHtml(): string {
 </head>
 <body>
 
-<h1>Cal-Sync Dashboard</h1>
-<p class="subtitle">Google Calendar &harr; LINE WORKS Calendar</p>
+<h1>カレンダー同期 ダッシュボード</h1>
+<p class="subtitle">Google カレンダー &harr; LINE WORKS カレンダー</p>
 
 <div class="refresh-row">
   <span class="time-ago" id="lastRefresh"></span>
-  <button onclick="loadAll()">Refresh</button>
+  <button onclick="loadAll()">更新</button>
 </div>
 
 <!-- Status + Watch -->
 <div class="grid">
   <div class="card" id="statusCard">
-    <h2>Service Status</h2>
-    <div id="statusBody"><div class="empty"><span class="spinner"></span> Loading...</div></div>
+    <h2>サービス状態</h2>
+    <div id="statusBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
   </div>
   <div class="card" id="watchCard">
-    <h2>Google Watch Channel</h2>
-    <div id="watchBody"><div class="empty"><span class="spinner"></span> Loading...</div></div>
+    <h2>Google Watch チャネル</h2>
+    <div id="watchBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
   </div>
 </div>
 
 <!-- Users -->
 <div class="card" style="margin-bottom:16px" id="usersCard">
-  <h2>User Configs</h2>
-  <div id="usersBody"><div class="empty"><span class="spinner"></span> Loading...</div></div>
+  <h2>ユーザー設定</h2>
+  <div id="usersBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
 </div>
 
 <!-- Mappings -->
 <div class="card" style="margin-bottom:16px" id="mappingsCard">
-  <h2>Event Mappings</h2>
-  <div id="mappingsBody"><div class="empty"><span class="spinner"></span> Loading...</div></div>
+  <h2>イベントマッピング</h2>
+  <div id="mappingsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
 </div>
 
 <!-- Errors -->
 <div class="card" style="margin-bottom:16px" id="errorsCard">
-  <h2>Error Queue</h2>
-  <div id="errorsBody"><div class="empty"><span class="spinner"></span> Loading...</div></div>
+  <h2>エラーキュー</h2>
+  <div id="errorsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
 </div>
 
 <!-- Actions -->
 <div class="card">
-  <h2>Actions</h2>
+  <h2>アクション</h2>
   <div class="actions">
-    <button onclick="triggerPoll()" id="btnPoll">Trigger Poll</button>
-    <button onclick="triggerInitialSync()" id="btnInitSync">Initial Sync</button>
-    <button onclick="triggerWatchRenew()" id="btnWatchRenew">Renew Watch</button>
+    <button onclick="triggerPoll()" id="btnPoll">ポーリング実行</button>
+    <button onclick="triggerInitialSync()" id="btnInitSync">初回同期</button>
+    <button onclick="triggerWatchRenew()" id="btnWatchRenew">Watch 更新</button>
   </div>
 </div>
 
@@ -123,18 +123,18 @@ function badge(text, cls){
 
 function fmtUptime(s){
   const d=Math.floor(s/86400), h=Math.floor((s%86400)/3600), m=Math.floor((s%3600)/60);
-  return (d?d+'d ':'')+(h?h+'h ':'')+(m?m+'m':'<1m');
+  return (d?d+'日 ':'')+(h?h+'時間 ':'')+(m?m+'分':'1分未満');
 }
 
 function relTime(iso){
   if(!iso) return '-';
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff/60000);
-  if(mins < 1) return 'just now';
-  if(mins < 60) return mins+'m ago';
+  if(mins < 1) return 'たった今';
+  if(mins < 60) return mins+'分前';
   const hrs = Math.floor(mins/60);
-  if(hrs < 24) return hrs+'h ago';
-  return Math.floor(hrs/24)+'d ago';
+  if(hrs < 24) return hrs+'時間前';
+  return Math.floor(hrs/24)+'日前';
 }
 
 async function api(path){
@@ -146,14 +146,14 @@ async function loadStatus(){
   try{
     const d = await api('/status');
     $('statusBody').innerHTML =
-      kv('Status', d.status) +
-      kv('Uptime', fmtUptime(d.uptime)) +
-      kv('User ID', d.env.syncUserId) +
-      kv('Firestore Project', d.env.firestoreProject) +
-      kv('Port', d.env.port);
+      kv('状態', d.status) +
+      kv('稼働時間', fmtUptime(d.uptime)) +
+      kv('ユーザーID', d.env.syncUserId) +
+      kv('Firestore プロジェクト', d.env.firestoreProject) +
+      kv('ポート', d.env.port);
     currentUserId = currentUserId || d.env.syncUserId;
   }catch(e){
-    $('statusBody').innerHTML = '<div class="empty">Failed to load status</div>';
+    $('statusBody').innerHTML = '<div class="empty">状態の読み込みに失敗しました</div>';
   }
 }
 
@@ -161,67 +161,67 @@ async function loadUsers(){
   try{
     const users = await api('/users');
     if(!users.length){
-      $('usersBody').innerHTML = '<div class="empty">No users configured</div>';
+      $('usersBody').innerHTML = '<div class="empty">ユーザーが未設定です</div>';
       return;
     }
-    let html = '<table><tr><th>User ID</th><th>Google Cal</th><th>LW Cal</th><th>Google Token</th><th>LW Token</th></tr>';
+    let html = '<table><tr><th>ユーザーID</th><th>Google カレンダー</th><th>LW カレンダー</th><th>Google トークン</th><th>LW トークン</th></tr>';
     for(const u of users){
       html += '<tr>'
         +'<td>'+esc(u.userId)+'</td>'
         +'<td>'+esc(u.googleCalendarId)+'</td>'
         +'<td>'+esc(u.lineworksCalendarId)+'</td>'
-        +'<td>'+(u.hasGoogleToken ? badge('OK','ok') : badge('Missing','err'))+'</td>'
-        +'<td>'+(u.hasLineworksToken ? badge('OK','ok') : badge('Missing','err'))+'</td>'
+        +'<td>'+(u.hasGoogleToken ? badge('OK','ok') : badge('未設定','err'))+'</td>'
+        +'<td>'+(u.hasLineworksToken ? badge('OK','ok') : badge('未設定','err'))+'</td>'
         +'</tr>';
       if(!currentUserId) currentUserId = u.userId;
     }
     html += '</table>';
     $('usersBody').innerHTML = html;
   }catch(e){
-    $('usersBody').innerHTML = '<div class="empty">Failed to load users</div>';
+    $('usersBody').innerHTML = '<div class="empty">ユーザー情報の読み込みに失敗しました</div>';
   }
 }
 
 async function loadWatch(){
   if(!currentUserId){
-    $('watchBody').innerHTML = '<div class="empty">No user ID</div>';
+    $('watchBody').innerHTML = '<div class="empty">ユーザーIDがありません</div>';
     return;
   }
   try{
     const d = await api('/watch/'+encodeURIComponent(currentUserId));
     if(!d.active && !d.channelId){
-      $('watchBody').innerHTML = '<div class="empty">No watch channel configured</div>';
+      $('watchBody').innerHTML = '<div class="empty">Watch チャネルが未設定です</div>';
       return;
     }
     const status = d.active
-      ? (d.hoursLeft > 24 ? badge('Active','ok') : badge('Expiring soon','warn'))
-      : badge('Expired','err');
+      ? (d.hoursLeft > 24 ? badge('有効','ok') : badge('まもなく期限切れ','warn'))
+      : badge('期限切れ','err');
     $('watchBody').innerHTML =
-      kv('Status', '') + // placeholder replaced below
-      kv('Channel ID', d.channelId || '-') +
-      kv('Expires', d.expiration ? new Date(d.expiration).toLocaleString() : '-') +
-      kv('Hours Left', d.hoursLeft ?? '-') +
+      kv('状態', '') + // placeholder replaced below
+      kv('チャネルID', d.channelId || '-') +
+      kv('有効期限', d.expiration ? new Date(d.expiration).toLocaleString() : '-') +
+      kv('残り時間', d.hoursLeft ? d.hoursLeft + '時間' : '-') +
       kv('Webhook URL', d.webhookUrl || '-');
     // Inject badge into first row value
     $('watchBody').querySelector('.kv .v').innerHTML = status;
   }catch(e){
-    $('watchBody').innerHTML = '<div class="empty">Failed to load watch info</div>';
+    $('watchBody').innerHTML = '<div class="empty">Watch 情報の読み込みに失敗しました</div>';
   }
 }
 
 async function loadMappings(){
   if(!currentUserId){
-    $('mappingsBody').innerHTML = '<div class="empty">No user ID</div>';
+    $('mappingsBody').innerHTML = '<div class="empty">ユーザーIDがありません</div>';
     return;
   }
   try{
     const d = await api('/mappings/'+encodeURIComponent(currentUserId));
     if(!d.mappings.length){
-      $('mappingsBody').innerHTML = '<div class="empty">No event mappings yet</div>';
+      $('mappingsBody').innerHTML = '<div class="empty">イベントマッピングはまだありません</div>';
       return;
     }
-    let html = '<div style="margin-bottom:8px;color:var(--muted)">Total: <strong style="color:var(--text)">'+d.count+'</strong> mappings (showing latest 100)</div>';
-    html += '<table><tr><th>Google Event ID</th><th>LW Event ID</th><th>Last Source</th><th>Updated</th></tr>';
+    let html = '<div style="margin-bottom:8px;color:var(--muted)">合計: <strong style="color:var(--text)">'+d.count+'</strong> 件（最新100件を表示）</div>';
+    html += '<table><tr><th>Google イベントID</th><th>LW イベントID</th><th>最終同期元</th><th>更新日時</th></tr>';
     for(const m of d.mappings){
       html += '<tr>'
         +'<td>'+esc(m.googleEventId)+'</td>'
@@ -233,23 +233,23 @@ async function loadMappings(){
     html += '</table>';
     $('mappingsBody').innerHTML = html;
   }catch(e){
-    $('mappingsBody').innerHTML = '<div class="empty">Failed to load mappings</div>';
+    $('mappingsBody').innerHTML = '<div class="empty">マッピング情報の読み込みに失敗しました</div>';
   }
 }
 
 async function loadErrors(){
   if(!currentUserId){
-    $('errorsBody').innerHTML = '<div class="empty">No user ID</div>';
+    $('errorsBody').innerHTML = '<div class="empty">ユーザーIDがありません</div>';
     return;
   }
   try{
     const d = await api('/errors/'+encodeURIComponent(currentUserId));
     if(!d.errors.length){
-      $('errorsBody').innerHTML = '<div class="empty">'+badge('No errors','ok')+' Error queue is empty</div>';
+      $('errorsBody').innerHTML = '<div class="empty">'+badge('エラーなし','ok')+' エラーキューは空です</div>';
       return;
     }
-    let html = '<div style="margin-bottom:8px">'+badge(d.count+' errors','err')+'</div>';
-    html += '<table><tr><th>Event ID</th><th>Source</th><th>Action</th><th>Error</th><th>Retries</th><th>Created</th></tr>';
+    let html = '<div style="margin-bottom:8px">'+badge(d.count+' 件のエラー','err')+'</div>';
+    html += '<table><tr><th>イベントID</th><th>ソース</th><th>アクション</th><th>エラー内容</th><th>リトライ回数</th><th>発生日時</th></tr>';
     for(const e of d.errors){
       html += '<tr>'
         +'<td>'+esc(e.eventId)+'</td>'
@@ -263,22 +263,22 @@ async function loadErrors(){
     html += '</table>';
     $('errorsBody').innerHTML = html;
   }catch(e){
-    $('errorsBody').innerHTML = '<div class="empty">Failed to load errors</div>';
+    $('errorsBody').innerHTML = '<div class="empty">エラー情報の読み込みに失敗しました</div>';
   }
 }
 
 async function loadAll(){
-  $('lastRefresh').textContent = 'Refreshing...';
+  $('lastRefresh').textContent = '更新中...';
   await Promise.all([loadStatus(), loadUsers()]);
   // after status/users resolve we have currentUserId
   await Promise.all([loadWatch(), loadMappings(), loadErrors()]);
-  $('lastRefresh').textContent = 'Last refreshed: ' + new Date().toLocaleTimeString();
+  $('lastRefresh').textContent = '最終更新: ' + new Date().toLocaleTimeString();
 }
 
 async function triggerPoll(){
   const btn = $('btnPoll');
   btn.disabled = true;
-  btn.textContent = 'Running...';
+  btn.textContent = '実行中...';
   try{
     const r = await fetch('/poll', {
       method: 'POST',
@@ -286,21 +286,21 @@ async function triggerPoll(){
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();
-    toast(d.status === 'ok' ? 'Poll completed' : 'Poll failed: '+(d.error||'unknown'));
+    toast(d.status === 'ok' ? 'ポーリング完了' : 'ポーリング失敗: '+(d.error||'不明'));
     loadAll();
   }catch(e){
-    toast('Poll request failed');
+    toast('ポーリングリクエストに失敗しました');
   }finally{
     btn.disabled = false;
-    btn.textContent = 'Trigger Poll';
+    btn.textContent = 'ポーリング実行';
   }
 }
 
 async function triggerInitialSync(){
-  if(!confirm('Run initial sync? This will sync all events from the last 30 days.')) return;
+  if(!confirm('初回同期を実行しますか？過去30日分のイベントが同期されます。')) return;
   const btn = $('btnInitSync');
   btn.disabled = true;
-  btn.textContent = 'Running...';
+  btn.textContent = '実行中...';
   try{
     const r = await fetch('/admin/initial-sync', {
       method: 'POST',
@@ -309,23 +309,23 @@ async function triggerInitialSync(){
     });
     const d = await r.json();
     if(d.status === 'ok'){
-      toast('Initial sync done: G->LW='+d.googleToLw+' LW->G='+d.lwToGoogle);
+      toast('初回同期完了: G→LW='+d.googleToLw+' LW→G='+d.lwToGoogle);
     } else {
-      toast('Initial sync failed: '+(d.error||'unknown'));
+      toast('初回同期失敗: '+(d.error||'不明'));
     }
     loadAll();
   }catch(e){
-    toast('Initial sync request failed');
+    toast('初回同期リクエストに失敗しました');
   }finally{
     btn.disabled = false;
-    btn.textContent = 'Initial Sync';
+    btn.textContent = '初回同期';
   }
 }
 
 async function triggerWatchRenew(){
   const btn = $('btnWatchRenew');
   btn.disabled = true;
-  btn.textContent = 'Renewing...';
+  btn.textContent = '更新中...';
   try{
     const r = await fetch('/admin/watch/renew', {
       method: 'POST',
@@ -333,13 +333,13 @@ async function triggerWatchRenew(){
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();
-    toast(d.status === 'ok' ? 'Watch renewed' : 'Renew failed: '+(d.error||'unknown'));
+    toast(d.status === 'ok' ? 'Watch 更新完了' : 'Watch 更新失敗: '+(d.error||'不明'));
     loadAll();
   }catch(e){
-    toast('Watch renew request failed');
+    toast('Watch 更新リクエストに失敗しました');
   }finally{
     btn.disabled = false;
-    btn.textContent = 'Renew Watch';
+    btn.textContent = 'Watch 更新';
   }
 }
 
