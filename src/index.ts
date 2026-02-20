@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import { handleGoogleWebhook } from './google/webhook';
 import { handleLineworksWebhook } from './lineworks/webhook';
