@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getFirestore, getUserConfig, getAllMappingsForUser, popErrorQueue } from '../db/firestore';
+import { getFirestore, getUserConfig, getAllMappingsForUser, getErrorQueue } from '../db/firestore';
 
 const router = Router();
 
@@ -61,8 +61,8 @@ router.get('/mappings/:userId', async (req, res) => {
 /** GET /dashboard/api/errors/:userId – error queue entries */
 router.get('/errors/:userId', async (req, res) => {
   try {
-    const errors = await popErrorQueue(req.params.userId);
-    // popErrorQueue reads but does NOT delete – it just reads the oldest 20
+    const errors = await getErrorQueue(req.params.userId);
+    // getErrorQueue reads but does NOT delete – it just reads the oldest 20
     res.json({ count: errors.length, errors });
   } catch (error) {
     res.status(500).json({ error: String(error) });

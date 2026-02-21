@@ -10,26 +10,27 @@ interface TokenResponse {
   refresh_token?: string;
 }
 
-let cachedToken: { accessToken: string; expiresAt: number } | null = null;
+const tokenCache = new Map<string, { accessToken: string; expiresAt: number }>();
 
 /**
  * Obtain (or refresh) an OAuth2 access token for LINE WORKS API.
- * Caches the token and refreshes it when it is about to expire.
+ * Caches the token per refresh token and refreshes it when it is about to expire.
  */
 export async function getLineworksAccessToken(refreshToken?: string): Promise<string> {
-  const now = Date.now();
-
-  // Return cached token if still valid (with 60s margin)
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) {
-    return cachedToken.accessToken;
-  }
-
   const clientId = process.env.LW_CLIENT_ID;
   const clientSecret = process.env.LW_CLIENT_SECRET;
   const token = refreshToken ?? process.env.LW_REFRESH_TOKEN;
 
   if (!clientId || !clientSecret || !token) {
     throw new Error('Missing LINE WORKS OAuth2 credentials in environment variables');
+  }
+
+  const now = Date.now();
+
+  // Return cached token if still valid (with 60s margin)
+  const cached = tokenCache.get(token);
+  if (cached && cached.expiresAt > now + 60_000) {
+    return cached.accessToken;
   }
 
   const params = new URLSearchParams({
@@ -43,19 +44,19 @@ export async function getLineworksAccessToken(refreshToken?: string): Promise<st
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
 
-  cachedToken = {
+  tokenCache.set(token, {
     accessToken: res.data.access_token,
     expiresAt: now + res.data.expires_in * 1000,
-  };
+  });
 
   logger.info('lineworks_token_refreshed', {
     details: { expiresIn: res.data.expires_in },
   });
 
-  return cachedToken.accessToken;
+  return res.data.access_token;
 }
 
-/** Clear the cached token (useful for testing or forced refresh). */
+/** Clear all cached tokens (useful for testing or forced refresh). */
 export function clearTokenCache(): void {
-  cachedToken = null;
+  tokenCache.clear();
 }

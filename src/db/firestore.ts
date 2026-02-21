@@ -95,6 +95,58 @@ export async function getAllMappingsForUser(userId: string): Promise<EventMappin
   return snapshot.docs.map((doc) => doc.data() as EventMapping);
 }
 
+/**
+ * Batch-fetch mappings for multiple Google event IDs.
+ * Uses Firestore 'in' queries (max 30 per query) for efficiency.
+ */
+export async function getMappingsByGoogleIds(
+  googleEventIds: string[],
+  userId: string
+): Promise<Map<string, EventMapping>> {
+  const result = new Map<string, EventMapping>();
+  if (googleEventIds.length === 0) return result;
+
+  for (let i = 0; i < googleEventIds.length; i += 30) {
+    const chunk = googleEventIds.slice(i, i + 30);
+    const snapshot = await getFirestore()
+      .collection(MAPPINGS_COLLECTION)
+      .where('googleEventId', 'in', chunk)
+      .where('userId', '==', userId)
+      .get();
+    for (const doc of snapshot.docs) {
+      const mapping = doc.data() as EventMapping;
+      result.set(mapping.googleEventId, mapping);
+    }
+  }
+  return result;
+}
+
+/**
+ * Batch-fetch mappings for multiple LINE WORKS event IDs.
+ * Uses Firestore 'in' queries (max 30 per query) for efficiency.
+ */
+export async function getMappingsByLineworksIds(
+  lineworksEventIds: string[],
+  userId: string
+): Promise<Map<string, EventMapping>> {
+  const result = new Map<string, EventMapping>();
+  if (lineworksEventIds.length === 0) return result;
+
+  for (let i = 0; i < lineworksEventIds.length; i += 30) {
+    const chunk = lineworksEventIds.slice(i, i + 30);
+    const snapshot = await getFirestore()
+      .collection(MAPPINGS_COLLECTION)
+      .where('lineworksEventId', 'in', chunk)
+      .where('userId', '==', userId)
+      .get();
+    for (const doc of snapshot.docs) {
+      const mapping = doc.data() as EventMapping;
+      result.set(mapping.lineworksEventId, mapping);
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Error queue operations
 // ---------------------------------------------------------------------------
@@ -120,7 +172,7 @@ export async function pushErrorQueue(entry: ErrorQueueEntry): Promise<void> {
   });
 }
 
-export async function popErrorQueue(userId: string): Promise<Array<ErrorQueueEntry & { docId: string }>> {
+export async function getErrorQueue(userId: string): Promise<Array<ErrorQueueEntry & { docId: string }>> {
   const snapshot = await getFirestore()
     .collection(ERROR_QUEUE_COLLECTION)
     .where('userId', '==', userId)

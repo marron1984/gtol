@@ -3,7 +3,7 @@ import * as lwCal from '../lineworks/calendar';
 import { syncGoogleToLineworks, syncLineworksToGoogle } from './engine';
 import {
   getUserConfig,
-  popErrorQueue,
+  getErrorQueue,
   removeErrorQueueEntry,
   pushErrorQueue,
 } from '../db/firestore';
@@ -11,6 +11,16 @@ import { logger } from '../utils/logger';
 import { notifyAdmin } from '../utils/notify';
 
 const DEFAULT_LOOKBACK_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_POLL_EVENTS = 200;
+const BATCH_SIZE = parseInt(process.env.SYNC_BATCH_SIZE ?? '5', 10);
+
+function chunks<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
 
 /**
  * Run a full bidirectional poll for the given user.
@@ -33,25 +43,30 @@ export async function runPoll(userId: string): Promise<void> {
   // 1. Google → LINE WORKS
   // ---------------------------------------------------------------------------
   try {
-    const googleEvents = await googleCal.listRecentEvents(
+    const allGoogleEvents = await googleCal.listRecentEvents(
       config.googleCalendarId,
       updatedMin,
       config.googleRefreshToken
     );
+    const googleEvents = allGoogleEvents.slice(0, MAX_POLL_EVENTS);
 
     logger.info('poller_google_events_fetched', {
-      details: { count: googleEvents.length },
+      details: { count: googleEvents.length, total: allGoogleEvents.length },
     });
 
-    for (const event of googleEvents) {
-      await syncGoogleToLineworks(
-        event,
-        userId,
-        config.googleCalendarId,
-        config.lineworksCalendarId,
-        config.lineworksUserId!,
-        config.googleRefreshToken,
-        config.lineworksRefreshToken
+    for (const chunk of chunks(googleEvents, BATCH_SIZE)) {
+      await Promise.allSettled(
+        chunk.map((event) =>
+          syncGoogleToLineworks(
+            event,
+            userId,
+            config.googleCalendarId,
+            config.lineworksCalendarId,
+            config.lineworksUserId!,
+            config.googleRefreshToken,
+            config.lineworksRefreshToken
+          )
+        )
       );
     }
   } catch (error) {
@@ -62,25 +77,30 @@ export async function runPoll(userId: string): Promise<void> {
   // 2. LINE WORKS → Google
   // ---------------------------------------------------------------------------
   try {
-    const lwEvents = await lwCal.listRecentEvents(
+    const allLwEvents = await lwCal.listRecentEvents(
       config.lineworksCalendarId,
       config.lineworksUserId!,
       updatedMin,
       config.lineworksRefreshToken
     );
+    const lwEvents = allLwEvents.slice(0, MAX_POLL_EVENTS);
 
     logger.info('poller_lineworks_events_fetched', {
-      details: { count: lwEvents.length },
+      details: { count: lwEvents.length, total: allLwEvents.length },
     });
 
-    for (const event of lwEvents) {
-      await syncLineworksToGoogle(
-        event,
-        userId,
-        config.googleCalendarId,
-        config.lineworksCalendarId,
-        config.googleRefreshToken,
-        config.lineworksRefreshToken
+    for (const chunk of chunks(lwEvents, BATCH_SIZE)) {
+      await Promise.allSettled(
+        chunk.map((event) =>
+          syncLineworksToGoogle(
+            event,
+            userId,
+            config.googleCalendarId,
+            config.lineworksCalendarId,
+            config.googleRefreshToken,
+            config.lineworksRefreshToken
+          )
+        )
       );
     }
   } catch (error) {
@@ -99,7 +119,7 @@ export async function runPoll(userId: string): Promise<void> {
  * Process items in the error queue: re-fetch the event and try to sync again.
  */
 async function retryErrorQueue(userId: string): Promise<void> {
-  const entries = await popErrorQueue(userId);
+  const entries = await getErrorQueue(userId);
   if (entries.length === 0) return;
 
   logger.info('poller_error_queue_retry', {
@@ -208,10 +228,11 @@ async function retryErrorQueue(userId: string): Promise<void> {
           `Source: ${entry.source}\nEvent: ${entry.eventId}\nAction: ${entry.action}\nError: ${error instanceof Error ? error.message : String(error)}`
         );
       } else {
-        // Re-enqueue with incremented count
+        // Re-enqueue with incremented count (exclude docId from the new entry)
         await removeErrorQueueEntry(entry.docId);
+        const { docId: _, ...entryWithoutDocId } = entry;
         await pushErrorQueue({
-          ...entry,
+          ...entryWithoutDocId,
           retryCount: entry.retryCount + 1,
           error: error instanceof Error ? error.message : String(error),
         });

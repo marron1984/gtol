@@ -36,8 +36,8 @@ export async function handleLineworksWebhook(req: Request, res: Response): Promi
     return;
   }
 
-  // Verify signature
-  const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+  // Verify signature using the raw body captured by express.json({ verify })
+  const rawBody = (req as Request & { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
   if (!signature || !verifySignature(rawBody, signature, webhookSecret)) {
     logger.error('lineworks_webhook_invalid_signature', 'Signature verification failed');
     res.status(401).send('Invalid signature');

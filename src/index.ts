@@ -42,10 +42,36 @@ app.post('/webhooks/google', handleGoogleWebhook);
 app.post('/webhooks/lineworks', handleLineworksWebhook);
 
 // ---------------------------------------------------------------------------
+// Admin auth middleware – protects /poll, /admin/*, and /dashboard endpoints.
+// Requires the ADMIN_API_KEY env var. Requests must send the key via
+// Authorization: Bearer <key> header or ?apiKey= query parameter.
+// ---------------------------------------------------------------------------
+function requireAdminAuth(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const expectedKey = process.env.ADMIN_API_KEY;
+  if (!expectedKey) {
+    // If no key is configured, allow access (development mode)
+    next();
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+  const queryKey = req.query.apiKey as string | undefined;
+  const providedKey = bearerToken ?? queryKey;
+
+  if (providedKey === expectedKey) {
+    next();
+    return;
+  }
+
+  res.status(401).json({ error: 'Unauthorized: invalid or missing API key' });
+}
+
+// ---------------------------------------------------------------------------
 // Polling endpoint (triggered by Cloud Scheduler)
 // Also checks and renews Google Watch channels that are about to expire.
 // ---------------------------------------------------------------------------
-app.post('/poll', async (req, res) => {
+app.post('/poll', requireAdminAuth, async (req, res) => {
   const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
   if (!userId) {
     res.status(400).json({ error: 'userId is required' });
@@ -69,7 +95,7 @@ app.post('/poll', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Admin: user config management
 // ---------------------------------------------------------------------------
-app.get('/admin/config/:userId', async (req, res) => {
+app.get('/admin/config/:userId', requireAdminAuth, async (req, res) => {
   try {
     const config = await getUserConfig(req.params.userId);
     if (!config) {
@@ -88,7 +114,7 @@ app.get('/admin/config/:userId', async (req, res) => {
   }
 });
 
-app.post('/admin/config', async (req, res) => {
+app.post('/admin/config', requireAdminAuth, async (req, res) => {
   const body = req.body as Partial<UserConfig>;
   if (!body.userId || !body.googleCalendarId || !body.googleRefreshToken ||
       !body.lineworksCalendarId || !body.lineworksRefreshToken) {
@@ -110,7 +136,7 @@ app.post('/admin/config', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Admin: Google Watch channel management
 // ---------------------------------------------------------------------------
-app.post('/admin/watch/start', async (req, res) => {
+app.post('/admin/watch/start', requireAdminAuth, async (req, res) => {
   const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
   if (!userId) {
     res.status(400).json({ error: 'userId is required' });
@@ -140,7 +166,7 @@ app.post('/admin/watch/start', async (req, res) => {
   }
 });
 
-app.post('/admin/watch/renew', async (req, res) => {
+app.post('/admin/watch/renew', requireAdminAuth, async (req, res) => {
   const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
   if (!userId) {
     res.status(400).json({ error: 'userId is required' });
@@ -160,7 +186,7 @@ app.post('/admin/watch/renew', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Admin: initial full sync (first-time setup)
 // ---------------------------------------------------------------------------
-app.post('/admin/initial-sync', async (req, res) => {
+app.post('/admin/initial-sync', requireAdminAuth, async (req, res) => {
   const userId = req.body?.userId ?? process.env.SYNC_USER_ID;
   if (!userId) {
     res.status(400).json({ error: 'userId is required' });
@@ -184,9 +210,9 @@ app.post('/admin/initial-sync', async (req, res) => {
 // ---------------------------------------------------------------------------
 // Dashboard
 // ---------------------------------------------------------------------------
-app.use('/dashboard/api', dashboardApi);
+app.use('/dashboard/api', requireAdminAuth, dashboardApi);
 
-app.get('/dashboard', (_req, res) => {
+app.get('/dashboard', requireAdminAuth, (_req, res) => {
   res.setHeader('Content-Type', 'text/html');
   res.send(dashboardHtml());
 });

@@ -6,16 +6,28 @@ import { logger } from '../utils/logger';
 
 const BASE_URL = 'https://www.worksapis.com/v1.0';
 
+const clientCache = new Map<string, AxiosInstance>();
+
 async function getClient(refreshToken?: string): Promise<AxiosInstance> {
-  const accessToken = await getLineworksAccessToken(refreshToken);
-  return axios.create({
+  const cacheKey = refreshToken ?? '__default__';
+  const cached = clientCache.get(cacheKey);
+  if (cached) return cached;
+
+  const client = axios.create({
     baseURL: BASE_URL,
     timeout: 30000,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
   });
+
+  // Use interceptor to always set fresh token before each request
+  client.interceptors.request.use(async (config) => {
+    const token = await getLineworksAccessToken(refreshToken);
+    config.headers.Authorization = `Bearer ${token}`;
+    return config;
+  });
+
+  clientCache.set(cacheKey, client);
+  return client;
 }
 
 // ---------------------------------------------------------------------------
