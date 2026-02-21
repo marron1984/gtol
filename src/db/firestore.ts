@@ -13,12 +13,9 @@ export function getFirestore(): Firestore {
     const projectId = process.env.FIRESTORE_PROJECT_ID
       || process.env.GOOGLE_CLOUD_PROJECT
       || process.env.GCLOUD_PROJECT;
-    if (!projectId) {
-      throw new Error(
-        'Firestore project ID not configured. Set FIRESTORE_PROJECT_ID env var.',
-      );
-    }
-    db = new Firestore({ projectId });
+    // On Cloud Run, the Firestore client can auto-detect the project ID
+    // from the metadata server when no explicit project ID is set.
+    db = new Firestore(projectId ? { projectId } : {});
   }
   return db;
 }
