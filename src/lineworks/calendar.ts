@@ -55,14 +55,16 @@ interface LWEventList {
 // ---------------------------------------------------------------------------
 
 function toCalendarEvent(lw: LWEvent): CalendarEvent {
-  const isAllDay = !lw.start.dateTime;
+  const start = lw.start ?? {};
+  const end = lw.end ?? {};
+  const isAllDay = !start.dateTime;
   return {
     id: lw.eventId,
     summary: lw.summary ?? '',
     description: lw.description ?? '',
     location: lw.location ?? '',
-    startTime: (isAllDay ? lw.start.date : lw.start.dateTime) ?? '',
-    endTime: (isAllDay ? lw.end.date : lw.end.dateTime) ?? '',
+    startTime: (isAllDay ? start.date : start.dateTime) ?? '',
+    endTime: (isAllDay ? end.date : end.dateTime) ?? '',
     isAllDay,
     isCancelled: lw.status === 'cancelled',
   };
