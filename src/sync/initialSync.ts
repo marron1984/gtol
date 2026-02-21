@@ -50,7 +50,7 @@ export async function runInitialSync(
     config.googleRefreshToken,
     timeMax
   );
-  const activeGoogleEvents = allGoogleEvents.filter((e) => !e.isCancelled).slice(0, MAX_INITIAL_SYNC_EVENTS);
+  const activeGoogleEvents = allGoogleEvents.filter((e) => !e.isCancelled && e.id).slice(0, MAX_INITIAL_SYNC_EVENTS);
   logger.info('initial_sync_phase1_fetched', {
     details: { userId, total: allGoogleEvents.length, active: activeGoogleEvents.length },
   });
@@ -107,7 +107,7 @@ export async function runInitialSync(
     timeMin,
     config.lineworksRefreshToken
   );
-  const activeLwEvents = allLwEvents.filter((e) => !e.isCancelled).slice(0, MAX_INITIAL_SYNC_EVENTS);
+  const activeLwEvents = allLwEvents.filter((e) => !e.isCancelled && e.id).slice(0, MAX_INITIAL_SYNC_EVENTS);
   logger.info('initial_sync_phase2_fetched', {
     details: { userId, total: allLwEvents.length, active: activeLwEvents.length },
   });
