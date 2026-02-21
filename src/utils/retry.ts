@@ -27,6 +27,17 @@ export async function withRetry<T>(
       return await fn();
     } catch (error) {
       lastError = error;
+
+      // Do not retry client errors (4xx) – they are permanent failures
+      const status = (error as { response?: { status?: number } }).response?.status;
+      if (status !== undefined && status >= 400 && status < 500) {
+        const responseData = (error as { response?: { data?: unknown } }).response?.data;
+        logger.error(`${label} (non-retryable ${status})`, error, {
+          details: { responseBody: responseData },
+        });
+        throw error;
+      }
+
       if (attempt < opts.maxRetries) {
         const delay = opts.baseDelayMs * Math.pow(2, attempt);
         logger.error(`${label} (attempt ${attempt + 1}/${opts.maxRetries + 1})`, error, {

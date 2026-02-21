@@ -145,22 +145,37 @@ export async function createEvent(
   refreshToken?: string
 ): Promise<CalendarEvent> {
   const client = await getClient(refreshToken);
-  const res = await withRetry(
-    () =>
-      client.post<LWEvent>(
-        `/users/${userId}/calendar/events`,
-        toLineworksEventBody(event),
-        { params: { calendarId } }
-      ),
-    'lineworks_create_event'
-  );
+  const body = toLineworksEventBody(event);
+  try {
+    const res = await withRetry(
+      () =>
+        client.post<LWEvent>(
+          `/users/${userId}/calendar/events`,
+          body,
+          { params: { calendarId } }
+        ),
+      'lineworks_create_event'
+    );
 
-  logger.info('lineworks_event_created', {
-    eventId: res.data.eventId,
-    source: 'lineworks',
-  });
+    logger.info('lineworks_event_created', {
+      eventId: res.data.eventId,
+      source: 'lineworks',
+    });
 
-  return toCalendarEvent(res.data);
+    return toCalendarEvent(res.data);
+  } catch (err) {
+    const axiosErr = err as { response?: { status?: number; data?: unknown }; config?: { url?: string } };
+    logger.error('lineworks_create_event_detail', err, {
+      details: {
+        url: `/users/${userId}/calendar/events`,
+        calendarId,
+        requestBody: body,
+        responseStatus: axiosErr.response?.status,
+        responseBody: axiosErr.response?.data,
+      },
+    });
+    throw err;
+  }
 }
 
 /** Update an existing event. */
