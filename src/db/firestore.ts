@@ -8,14 +8,15 @@ const ERROR_QUEUE_COLLECTION = 'error_queue';
 
 let db: Firestore;
 
+const DEFAULT_PROJECT_ID = 'gtol-488006';
+
 export function getFirestore(): Firestore {
   if (!db) {
     const projectId = process.env.FIRESTORE_PROJECT_ID
       || process.env.GOOGLE_CLOUD_PROJECT
-      || process.env.GCLOUD_PROJECT;
-    // On Cloud Run, the Firestore client can auto-detect the project ID
-    // from the metadata server when no explicit project ID is set.
-    db = new Firestore(projectId ? { projectId } : {});
+      || process.env.GCLOUD_PROJECT
+      || DEFAULT_PROJECT_ID;
+    db = new Firestore({ projectId });
   }
   return db;
 }
