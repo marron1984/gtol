@@ -49,7 +49,7 @@ export async function runPoll(userId: string): Promise<void> {
         userId,
         config.googleCalendarId,
         config.lineworksCalendarId,
-        userId,
+        config.lineworksUserId!,
         config.googleRefreshToken,
         config.lineworksRefreshToken
       );
@@ -64,7 +64,7 @@ export async function runPoll(userId: string): Promise<void> {
   try {
     const lwEvents = await lwCal.listRecentEvents(
       config.lineworksCalendarId,
-      userId,
+      config.lineworksUserId!,
       updatedMin,
       config.lineworksRefreshToken
     );
@@ -128,7 +128,7 @@ async function retryErrorQueue(userId: string): Promise<void> {
             userId,
             config.googleCalendarId,
             config.lineworksCalendarId,
-            userId,
+            config.lineworksUserId!,
             config.googleRefreshToken,
             config.lineworksRefreshToken
           );
@@ -144,7 +144,7 @@ async function retryErrorQueue(userId: string): Promise<void> {
               userId,
               config.googleCalendarId,
               config.lineworksCalendarId,
-              userId,
+              config.lineworksUserId!,
               config.googleRefreshToken,
               config.lineworksRefreshToken
             );
@@ -172,7 +172,7 @@ async function retryErrorQueue(userId: string): Promise<void> {
         } else {
           const event = await lwCal.getEvent(
             config.lineworksCalendarId,
-            userId,
+            config.lineworksUserId!,
             entry.eventId,
             config.lineworksRefreshToken
           );
