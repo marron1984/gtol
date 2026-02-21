@@ -149,7 +149,8 @@ export async function createEvent(
     () =>
       client.post<LWEvent>(
         `/users/${userId}/calendar/events`,
-        { ...toLineworksEventBody(event), calendarId }
+        toLineworksEventBody(event),
+        { params: { calendarId } }
       ),
     'lineworks_create_event'
   );
@@ -175,7 +176,8 @@ export async function updateEvent(
     () =>
       client.put<LWEvent>(
         `/users/${userId}/calendar/events/${eventId}`,
-        { ...toLineworksEventBody(event), calendarId }
+        toLineworksEventBody(event),
+        { params: { calendarId } }
       ),
     'lineworks_update_event'
   );
