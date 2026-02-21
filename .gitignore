@@ -5,3 +5,4 @@ dist/
 *.d.ts
 !src/**/*.d.ts
 service-account-key.json
+__pycache__/
