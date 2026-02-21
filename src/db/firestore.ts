@@ -10,9 +10,15 @@ let db: Firestore;
 
 export function getFirestore(): Firestore {
   if (!db) {
-    db = new Firestore({
-      projectId: process.env.FIRESTORE_PROJECT_ID,
-    });
+    const projectId = process.env.FIRESTORE_PROJECT_ID
+      || process.env.GOOGLE_CLOUD_PROJECT
+      || process.env.GCLOUD_PROJECT;
+    if (!projectId) {
+      throw new Error(
+        'Firestore project ID not configured. Set FIRESTORE_PROJECT_ID env var.',
+      );
+    }
+    db = new Firestore({ projectId });
   }
   return db;
 }

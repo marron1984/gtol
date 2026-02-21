@@ -432,6 +432,9 @@ def deploy_cloud_run(token: str, image_tag: str, env_vars: dict,
     skip_keys = {"GOOGLE_APPLICATION_CREDENTIALS", "PORT"}
     env_list = [{"name": k, "value": v}
                 for k, v in env_vars.items() if k not in skip_keys]
+    # Ensure GOOGLE_CLOUD_PROJECT is set (required by Google Cloud client libs)
+    if not any(e["name"] == "GOOGLE_CLOUD_PROJECT" for e in env_list):
+        env_list.append({"name": "GOOGLE_CLOUD_PROJECT", "value": PROJECT_ID})
 
     service_body = {
         "launchStage": "GA",
