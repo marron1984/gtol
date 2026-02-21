@@ -55,7 +55,7 @@ export async function runInitialSync(
       userId,
       config.googleCalendarId,
       config.lineworksCalendarId,
-      userId,
+      config.lineworksUserId!,
       config.googleRefreshToken,
       config.lineworksRefreshToken
     );
@@ -70,7 +70,7 @@ export async function runInitialSync(
   logger.info('initial_sync_phase2_fetch', { details: { userId, timeMin } });
   const lwEvents = await lwCal.listRecentEvents(
     config.lineworksCalendarId,
-    userId,
+    config.lineworksUserId!,
     timeMin,
     config.lineworksRefreshToken
   );

@@ -32,5 +32,7 @@ export interface UserConfig {
   googleCalendarId: string;
   googleRefreshToken: string;
   lineworksCalendarId: string;
+  /** LINE WORKS user ID used in API paths (e.g. "syoshida@aaworks"). Falls back to lineworksCalendarId if not set. */
+  lineworksUserId?: string;
   lineworksRefreshToken: string;
 }

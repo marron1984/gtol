@@ -152,7 +152,12 @@ export async function getUserConfig(userId: string): Promise<UserConfig | null> 
     .get();
 
   if (!doc.exists) return null;
-  return doc.data() as UserConfig;
+  const data = doc.data() as UserConfig;
+  // Fall back to lineworksCalendarId when lineworksUserId is not stored
+  if (!data.lineworksUserId) {
+    data.lineworksUserId = data.lineworksCalendarId;
+  }
+  return data;
 }
 
 export async function setUserConfig(config: UserConfig): Promise<void> {

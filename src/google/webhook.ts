@@ -57,14 +57,13 @@ export async function handleGoogleWebhook(req: Request, res: Response): Promise<
       config.googleRefreshToken
     );
 
-    const lwUserId = userId; // LINE WORKS user ID (same or mapped)
     for (const event of events) {
       await syncGoogleToLineworks(
         event,
         userId,
         config.googleCalendarId,
         config.lineworksCalendarId,
-        lwUserId,
+        config.lineworksUserId!,
         config.googleRefreshToken,
         config.lineworksRefreshToken
       );

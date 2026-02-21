@@ -103,7 +103,7 @@ export async function handleLineworksWebhook(req: Request, res: Response): Promi
         // Fetch the full event details from LINE WORKS
         const event = await lwCal.getEvent(
           config.lineworksCalendarId,
-          userId,
+          config.lineworksUserId!,
           eventId,
           config.lineworksRefreshToken
         );
