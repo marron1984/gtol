@@ -10,6 +10,7 @@ async function getClient(refreshToken?: string): Promise<AxiosInstance> {
   const accessToken = await getLineworksAccessToken(refreshToken);
   return axios.create({
     baseURL: BASE_URL,
+    timeout: 30000,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',

@@ -38,11 +38,15 @@ export async function runInitialSync(
 
   // Phase 1: Google → LINE WORKS
   let googleToLw = 0;
+  logger.info('initial_sync_phase1_fetch', { details: { userId, timeMin } });
   const googleEvents = await googleCal.listEventsByTimeRange(
     config.googleCalendarId,
     timeMin,
     config.googleRefreshToken
   );
+  logger.info('initial_sync_phase1_fetched', {
+    details: { userId, eventCount: googleEvents.length },
+  });
 
   for (const event of googleEvents) {
     if (event.isCancelled) continue;
@@ -56,16 +60,23 @@ export async function runInitialSync(
       config.lineworksRefreshToken
     );
     googleToLw++;
+    logger.info('initial_sync_phase1_progress', {
+      details: { userId, googleToLw, total: googleEvents.length },
+    });
   }
 
   // Phase 2: LINE WORKS → Google (only events not already synced in Phase 1)
   let lwToGoogle = 0;
+  logger.info('initial_sync_phase2_fetch', { details: { userId, timeMin } });
   const lwEvents = await lwCal.listRecentEvents(
     config.lineworksCalendarId,
     userId,
     timeMin,
     config.lineworksRefreshToken
   );
+  logger.info('initial_sync_phase2_fetched', {
+    details: { userId, eventCount: lwEvents.length },
+  });
 
   for (const event of lwEvents) {
     if (event.isCancelled) continue;
@@ -78,6 +89,9 @@ export async function runInitialSync(
       config.lineworksRefreshToken
     );
     lwToGoogle++;
+    logger.info('initial_sync_phase2_progress', {
+      details: { userId, lwToGoogle, total: lwEvents.length },
+    });
   }
 
   logger.info('initial_sync_complete', {

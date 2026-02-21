@@ -169,13 +169,15 @@ app.post('/admin/initial-sync', async (req, res) => {
 
   const daysBack = req.body?.daysBack ?? 30;
 
+  // Return 202 immediately; run sync in background
+  res.status(202).json({ status: 'accepted', message: `Initial sync started for ${userId} (${daysBack} days)` });
+
   try {
     const result = await runInitialSync(userId, daysBack);
-    res.json({ status: 'ok', ...result });
+    logger.info('admin_initial_sync_complete', { details: { userId, ...result } });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    logger.error('admin_initial_sync_failed', error);
-    res.status(500).json({ error: msg });
+    logger.error('admin_initial_sync_failed', error, { details: { userId, msg } });
   }
 });
 
