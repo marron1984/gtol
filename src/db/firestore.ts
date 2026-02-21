@@ -206,10 +206,8 @@ export async function getUserConfig(userId: string): Promise<UserConfig | null> 
   if (!doc.exists) return null;
   const data = doc.data() as UserConfig;
   // Fall back to lineworksCalendarId when lineworksUserId is not stored
-  // Strip the @domain part if present (e.g. "syoshida@aaworks" → "syoshida")
   if (!data.lineworksUserId) {
-    const calId = data.lineworksCalendarId;
-    data.lineworksUserId = calId.includes('@') ? calId.split('@')[0] : calId;
+    data.lineworksUserId = data.lineworksCalendarId;
   }
   return data;
 }
