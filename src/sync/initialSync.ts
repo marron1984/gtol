@@ -9,6 +9,7 @@ import {
 import { logger } from '../utils/logger';
 
 const BATCH_SIZE = parseInt(process.env.SYNC_BATCH_SIZE ?? '5', 10);
+const MAX_INITIAL_SYNC_EVENTS = 200;
 
 function chunks<T>(arr: T[], size: number): T[][] {
   const result: T[][] = [];
@@ -34,22 +35,24 @@ export async function runInitialSync(
   }
 
   const timeMin = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+  const timeMax = new Date().toISOString();
 
   logger.info('initial_sync_start', {
-    details: { userId, daysBack, timeMin, batchSize: BATCH_SIZE },
+    details: { userId, daysBack, timeMin, timeMax, batchSize: BATCH_SIZE, maxEvents: MAX_INITIAL_SYNC_EVENTS },
   });
 
   // Phase 1: Google → LINE WORKS
   let googleToLw = 0;
-  logger.info('initial_sync_phase1_fetch', { details: { userId, timeMin } });
-  const googleEvents = await googleCal.listEventsByTimeRange(
+  logger.info('initial_sync_phase1_fetch', { details: { userId, timeMin, timeMax } });
+  const allGoogleEvents = await googleCal.listEventsByTimeRange(
     config.googleCalendarId,
     timeMin,
-    config.googleRefreshToken
+    config.googleRefreshToken,
+    timeMax
   );
-  const activeGoogleEvents = googleEvents.filter((e) => !e.isCancelled);
+  const activeGoogleEvents = allGoogleEvents.filter((e) => !e.isCancelled).slice(0, MAX_INITIAL_SYNC_EVENTS);
   logger.info('initial_sync_phase1_fetched', {
-    details: { userId, total: googleEvents.length, active: activeGoogleEvents.length },
+    details: { userId, total: allGoogleEvents.length, active: activeGoogleEvents.length },
   });
 
   // Batch-fetch existing mappings to skip already-synced events
@@ -98,15 +101,15 @@ export async function runInitialSync(
   // Phase 2: LINE WORKS → Google (only events not already synced in Phase 1)
   let lwToGoogle = 0;
   logger.info('initial_sync_phase2_fetch', { details: { userId, timeMin } });
-  const lwEvents = await lwCal.listRecentEvents(
+  const allLwEvents = await lwCal.listRecentEvents(
     config.lineworksCalendarId,
     config.lineworksUserId!,
     timeMin,
     config.lineworksRefreshToken
   );
-  const activeLwEvents = lwEvents.filter((e) => !e.isCancelled);
+  const activeLwEvents = allLwEvents.filter((e) => !e.isCancelled).slice(0, MAX_INITIAL_SYNC_EVENTS);
   logger.info('initial_sync_phase2_fetched', {
-    details: { userId, total: lwEvents.length, active: activeLwEvents.length },
+    details: { userId, total: allLwEvents.length, active: activeLwEvents.length },
   });
 
   // Batch-fetch existing mappings to skip already-synced events

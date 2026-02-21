@@ -80,11 +80,12 @@ export async function listRecentEvents(
   return events;
 }
 
-/** List events with start time after `timeMin` (ISO 8601). Used for initial sync. */
+/** List events within a time range. Used for initial sync. */
 export async function listEventsByTimeRange(
   calendarId: string,
   timeMin: string,
-  refreshToken?: string
+  refreshToken?: string,
+  timeMax?: string
 ): Promise<CalendarEvent[]> {
   const cal = getCalendarClient(refreshToken);
   const events: CalendarEvent[] = [];
@@ -96,6 +97,7 @@ export async function listEventsByTimeRange(
         cal.events.list({
           calendarId,
           timeMin,
+          timeMax,
           singleEvents: true,
           orderBy: 'startTime',
           maxResults: 250,
