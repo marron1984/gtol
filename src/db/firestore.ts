@@ -16,7 +16,7 @@ export function getFirestore(): Firestore {
       || process.env.GOOGLE_CLOUD_PROJECT
       || process.env.GCLOUD_PROJECT
       || DEFAULT_PROJECT_ID;
-    db = new Firestore({ projectId });
+    db = new Firestore({ projectId, preferRest: true });
   }
   return db;
 }
