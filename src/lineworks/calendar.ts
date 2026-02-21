@@ -90,18 +90,21 @@ function toLineworksEventBody(event: CalendarEvent): Record<string, unknown> {
 // ---------------------------------------------------------------------------
 
 /**
- * List events modified since `fromDateTime` (ISO 8601).
+ * List events from `fromDateTime` to `untilDateTime` (ISO 8601).
  * Uses the users/{userId}/calendar/events endpoint.
+ * If `untilDateTime` is not provided, defaults to now.
  */
 export async function listRecentEvents(
   calendarId: string,
   userId: string,
   fromDateTime: string,
-  refreshToken?: string
+  refreshToken?: string,
+  untilDateTime?: string
 ): Promise<CalendarEvent[]> {
   const client = await getClient(refreshToken);
   const events: CalendarEvent[] = [];
   let cursor: string | undefined;
+  const until = untilDateTime ?? new Date().toISOString();
 
   do {
     const res = await withRetry(
@@ -110,6 +113,7 @@ export async function listRecentEvents(
           params: {
             calendarId,
             fromDateTime,
+            untilDateTime: until,
             count: 100,
             cursor,
           },
