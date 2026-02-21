@@ -30,17 +30,17 @@ export async function runInitialSync(
     );
   }
 
-  const updatedMin = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+  const timeMin = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
 
   logger.info('initial_sync_start', {
-    details: { userId, daysBack, updatedMin },
+    details: { userId, daysBack, timeMin },
   });
 
   // Phase 1: Google → LINE WORKS
   let googleToLw = 0;
-  const googleEvents = await googleCal.listRecentEvents(
+  const googleEvents = await googleCal.listEventsByTimeRange(
     config.googleCalendarId,
-    updatedMin,
+    timeMin,
     config.googleRefreshToken
   );
 
@@ -63,7 +63,7 @@ export async function runInitialSync(
   const lwEvents = await lwCal.listRecentEvents(
     config.lineworksCalendarId,
     userId,
-    updatedMin,
+    timeMin,
     config.lineworksRefreshToken
   );
 

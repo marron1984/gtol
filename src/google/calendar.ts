@@ -80,6 +80,39 @@ export async function listRecentEvents(
   return events;
 }
 
+/** List events with start time after `timeMin` (ISO 8601). Used for initial sync. */
+export async function listEventsByTimeRange(
+  calendarId: string,
+  timeMin: string,
+  refreshToken?: string
+): Promise<CalendarEvent[]> {
+  const cal = getCalendarClient(refreshToken);
+  const events: CalendarEvent[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const res = await withRetry(
+      () =>
+        cal.events.list({
+          calendarId,
+          timeMin,
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: 250,
+          pageToken,
+        }),
+      'google_list_events_by_time'
+    );
+
+    for (const item of res.data.items ?? []) {
+      events.push(toCalendarEvent(item));
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return events;
+}
+
 /** Get a single event by ID. */
 export async function getEvent(
   calendarId: string,
