@@ -1,10 +1,11 @@
 import { Firestore } from '@google-cloud/firestore';
-import { EventMapping, UserConfig } from '../types';
+import { EventMapping, SyncStatus, UserConfig } from '../types';
 import { logger } from '../utils/logger';
 
 const MAPPINGS_COLLECTION = 'event_mappings';
 const USERS_COLLECTION = 'user_configs';
 const ERROR_QUEUE_COLLECTION = 'error_queue';
+const SYNC_STATUS_COLLECTION = 'sync_status';
 
 let db: Firestore;
 
@@ -217,4 +218,25 @@ export async function setUserConfig(config: UserConfig): Promise<void> {
     .collection(USERS_COLLECTION)
     .doc(config.userId)
     .set(config, { merge: true });
+}
+
+// ---------------------------------------------------------------------------
+// Sync status operations (initial sync progress tracking)
+// ---------------------------------------------------------------------------
+
+export async function setSyncStatus(status: SyncStatus): Promise<void> {
+  await getFirestore()
+    .collection(SYNC_STATUS_COLLECTION)
+    .doc(status.userId)
+    .set(status, { merge: true });
+}
+
+export async function getSyncStatus(userId: string): Promise<SyncStatus | null> {
+  const doc = await getFirestore()
+    .collection(SYNC_STATUS_COLLECTION)
+    .doc(userId)
+    .get();
+
+  if (!doc.exists) return null;
+  return doc.data() as SyncStatus;
 }

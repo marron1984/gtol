@@ -42,6 +42,11 @@ export function dashboardHtml(): string {
   .refresh-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   .refresh-row button{background:transparent;color:var(--accent);border:1px solid var(--accent);font-weight:500}
   .time-ago{color:var(--muted);font-size:.8rem}
+  .progress-bar{background:var(--border);border-radius:6px;height:20px;overflow:hidden;margin:8px 0}
+  .progress-bar-fill{height:100%;border-radius:6px;transition:width .3s;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#0f172a;min-width:2em}
+  .progress-bar-fill.ok{background:var(--green)}
+  .progress-bar-fill.warn{background:var(--yellow)}
+  .progress-bar-fill.err{background:var(--red)}
 </style>
 </head>
 <body>
@@ -64,6 +69,12 @@ export function dashboardHtml(): string {
     <h2>Google Watch チャネル</h2>
     <div id="watchBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
   </div>
+</div>
+
+<!-- Sync Progress -->
+<div class="card" style="margin-bottom:16px" id="syncCard">
+  <h2>初回同期の進捗</h2>
+  <div id="syncBody"><div class="empty">データなし</div></div>
 </div>
 
 <!-- Users -->
@@ -237,6 +248,56 @@ async function loadMappings(){
   }
 }
 
+function fmtDuration(sec){
+  if(sec==null) return '-';
+  const m=Math.floor(sec/60), s=sec%60;
+  if(m<1) return s+'秒';
+  return m+'分'+s+'秒';
+}
+
+async function loadSyncStatus(){
+  if(!currentUserId){
+    $('syncBody').innerHTML = '<div class="empty">ユーザーIDがありません</div>';
+    return;
+  }
+  try{
+    const d = await api('/sync-status/'+encodeURIComponent(currentUserId));
+    if(!d.active && !d.status){
+      $('syncBody').innerHTML = '<div class="empty">初回同期の記録がありません</div>';
+      return;
+    }
+    const isRunning = d.status === 'running';
+    const isFailed = d.status === 'failed';
+    const phaseLabel = 'Phase ' + d.phase + (d.phase===1?' (Google → LW)':' (LW → Google)');
+    const done = d.phase===1 ? d.googleToLw : d.lwToGoogle;
+    const pct = d.phaseTotal > 0 ? Math.round((done/d.phaseTotal)*100) : 0;
+    const barClass = isFailed ? 'err' : (pct < 50 ? 'warn' : 'ok');
+    const statusBadge = isRunning ? badge('実行中','ok')
+                      : isFailed ? badge('失敗','err')
+                      : badge('完了','ok');
+
+    let html = kv('状態','') + kv('フェーズ', phaseLabel);
+    // inject badge
+    html = html.replace(/<span class="v"><\/span>/, '<span class="v">'+statusBadge+'</span>');
+
+    if(isRunning || isFailed){
+      html += '<div class="progress-bar"><div class="progress-bar-fill '+barClass+'" style="width:'+Math.max(pct,2)+'%">'+pct+'%</div></div>';
+      html += kv('成功', done + ' / ' + d.phaseTotal);
+      html += kv('失敗', String(d.phaseFailed));
+      html += kv('経過時間', fmtDuration(d.elapsedSec));
+    } else {
+      html += kv('Google → LW', d.googleToLw + ' 件');
+      html += kv('LW → Google', d.lwToGoogle + ' 件');
+    }
+    html += kv('最終更新', relTime(d.updatedAt));
+    if(d.error) html += kv('エラー', d.error);
+
+    $('syncBody').innerHTML = html;
+  }catch(e){
+    $('syncBody').innerHTML = '<div class="empty">同期状態の読み込みに失敗しました</div>';
+  }
+}
+
 async function loadErrors(){
   if(!currentUserId){
     $('errorsBody').innerHTML = '<div class="empty">ユーザーIDがありません</div>';
@@ -271,7 +332,7 @@ async function loadAll(){
   $('lastRefresh').textContent = '更新中...';
   await Promise.all([loadStatus(), loadUsers()]);
   // after status/users resolve we have currentUserId
-  await Promise.all([loadWatch(), loadMappings(), loadErrors()]);
+  await Promise.all([loadWatch(), loadSyncStatus(), loadMappings(), loadErrors()]);
   $('lastRefresh').textContent = '最終更新: ' + new Date().toLocaleTimeString();
 }
 

@@ -26,6 +26,28 @@ export interface EventMapping {
   updatedAt: string;
 }
 
+/** Initial sync progress stored in Firestore for dashboard monitoring. */
+export interface SyncStatus {
+  userId: string;
+  /** 'running' | 'completed' | 'failed' */
+  status: 'running' | 'completed' | 'failed';
+  phase: 1 | 2;
+  /** Cumulative successes for Google → LW */
+  googleToLw: number;
+  /** Cumulative successes for LW → Google */
+  lwToGoogle: number;
+  /** Total events to sync in current phase */
+  phaseTotal: number;
+  /** Failed events in current phase */
+  phaseFailed: number;
+  /** ISO 8601 – when the sync started */
+  startedAt: string;
+  /** ISO 8601 – last progress update */
+  updatedAt: string;
+  /** Error message if status === 'failed' */
+  error?: string;
+}
+
 /** Per-user configuration stored in Firestore. */
 export interface UserConfig {
   userId: string;

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getFirestore, getUserConfig, getAllMappingsForUser, getErrorQueue } from '../db/firestore';
+import { getFirestore, getUserConfig, getAllMappingsForUser, getErrorQueue, getSyncStatus } from '../db/firestore';
 
 const router = Router();
 
@@ -94,6 +94,21 @@ router.get('/watch/:userId', async (req, res) => {
       hoursLeft: Math.round(hoursLeft * 10) / 10,
       webhookUrl: data.webhookUrl,
     });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/** GET /dashboard/api/sync-status/:userId – initial sync progress */
+router.get('/sync-status/:userId', async (req, res) => {
+  try {
+    const status = await getSyncStatus(req.params.userId);
+    if (!status) {
+      res.json({ active: false });
+      return;
+    }
+    const elapsedSec = Math.floor((Date.now() - new Date(status.startedAt).getTime()) / 1000);
+    res.json({ ...status, elapsedSec });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
