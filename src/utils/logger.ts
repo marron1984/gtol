@@ -8,6 +8,21 @@ export interface LogEntry {
   details?: Record<string, unknown>;
 }
 
+const MAX_LOG_BUFFER = 200;
+const logBuffer: LogEntry[] = [];
+
+function pushToBuffer(entry: LogEntry): void {
+  logBuffer.push(entry);
+  if (logBuffer.length > MAX_LOG_BUFFER) {
+    logBuffer.shift();
+  }
+}
+
+/** Return the most recent log entries (newest first). */
+export function getRecentLogs(limit = 100): LogEntry[] {
+  return logBuffer.slice(-limit).reverse();
+}
+
 function formatLog(entry: LogEntry): string {
   return JSON.stringify(entry);
 }
@@ -20,6 +35,7 @@ export const logger = {
       status: 'success',
       ...details,
     };
+    pushToBuffer(entry);
     console.log(formatLog(entry));
   },
 
@@ -32,6 +48,7 @@ export const logger = {
       error: errorMessage,
       ...details,
     };
+    pushToBuffer(entry);
     console.error(formatLog(entry));
   },
 
@@ -42,6 +59,7 @@ export const logger = {
       status: 'skipped',
       ...details,
     };
+    pushToBuffer(entry);
     console.log(formatLog(entry));
   },
 };

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getFirestore, getUserConfig, getAllMappingsForUser, getErrorQueue, getSyncStatus } from '../db/firestore';
+import { getRecentLogs } from '../utils/logger';
 
 const router = Router();
 
@@ -109,6 +110,17 @@ router.get('/sync-status/:userId', async (req, res) => {
     }
     const elapsedSec = Math.floor((Date.now() - new Date(status.startedAt).getTime()) / 1000);
     res.json({ ...status, elapsedSec });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/** GET /dashboard/api/logs – recent in-memory log entries */
+router.get('/logs', async (_req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(_req.query.limit ?? '100'), 10), 200);
+    const logs = getRecentLogs(limit);
+    res.json({ count: logs.length, logs });
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }

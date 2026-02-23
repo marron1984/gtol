@@ -95,6 +95,12 @@ export function dashboardHtml(): string {
   <div id="errorsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
 </div>
 
+<!-- Logs -->
+<div class="card" style="margin-bottom:16px" id="logsCard">
+  <h2>同期ログ <span style="font-size:.75rem;color:var(--muted)">(直近100件・メモリ内)</span></h2>
+  <div id="logsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
+</div>
+
 <!-- Actions -->
 <div class="card">
   <h2>アクション</h2>
@@ -109,6 +115,7 @@ export function dashboardHtml(): string {
 
 <script>
 const API = '/dashboard/api';
+const ADMIN_KEY = new URLSearchParams(location.search).get('apiKey') || '';
 let currentUserId = null;
 
 function $(id){ return document.getElementById(id); }
@@ -148,8 +155,17 @@ function relTime(iso){
   return Math.floor(hrs/24)+'日前';
 }
 
+function authHeaders(){
+  const h = {'Content-Type':'application/json'};
+  if(ADMIN_KEY) h['Authorization'] = 'Bearer ' + ADMIN_KEY;
+  return h;
+}
+
 async function api(path){
-  const r = await fetch(API + path);
+  const sep = path.includes('?') ? '&' : '?';
+  const url = ADMIN_KEY ? API + path + sep + 'apiKey=' + encodeURIComponent(ADMIN_KEY) : API + path;
+  const r = await fetch(url);
+  if(!r.ok) throw new Error('API error: ' + r.status);
   return r.json();
 }
 
@@ -328,11 +344,43 @@ async function loadErrors(){
   }
 }
 
+async function loadLogs(){
+  try{
+    const d = await api('/logs?limit=100');
+    if(!d.logs || !d.logs.length){
+      $('logsBody').innerHTML = '<div class="empty">ログはまだありません</div>';
+      return;
+    }
+    let html = '<table><tr><th>時刻</th><th>アクション</th><th>状態</th><th>ソース</th><th>イベントID</th><th>詳細 / エラー</th></tr>';
+    for(const l of d.logs){
+      const time = l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : '-';
+      const statusBadge = l.status === 'success' ? badge('OK','ok')
+                        : l.status === 'failure' ? badge('ERR','err')
+                        : badge('SKIP','off');
+      const detail = l.error ? '<span style="color:var(--red)">'+esc(l.error)+'</span>'
+                   : l.details ? esc(JSON.stringify(l.details).slice(0,120))
+                   : '-';
+      html += '<tr>'
+        +'<td style="white-space:nowrap">'+esc(time)+'</td>'
+        +'<td>'+esc(l.action||'-')+'</td>'
+        +'<td>'+statusBadge+'</td>'
+        +'<td>'+esc(l.source||'-')+'</td>'
+        +'<td>'+esc(l.eventId||'-')+'</td>'
+        +'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">'+detail+'</td>'
+        +'</tr>';
+    }
+    html += '</table>';
+    $('logsBody').innerHTML = html;
+  }catch(e){
+    $('logsBody').innerHTML = '<div class="empty">ログの読み込みに失敗しました</div>';
+  }
+}
+
 async function loadAll(){
   $('lastRefresh').textContent = '更新中...';
   await Promise.all([loadStatus(), loadUsers()]);
   // after status/users resolve we have currentUserId
-  await Promise.all([loadWatch(), loadSyncStatus(), loadMappings(), loadErrors()]);
+  await Promise.all([loadWatch(), loadSyncStatus(), loadMappings(), loadErrors(), loadLogs()]);
   $('lastRefresh').textContent = '最終更新: ' + new Date().toLocaleTimeString();
 }
 
@@ -343,7 +391,7 @@ async function triggerPoll(){
   try{
     const r = await fetch('/poll', {
       method: 'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();
@@ -365,12 +413,25 @@ async function triggerInitialSync(){
   try{
     const r = await fetch('/admin/initial-sync', {
       method: 'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();
-    if(d.status === 'ok'){
-      toast('初回同期完了: G→LW='+d.googleToLw+' LW→G='+d.lwToGoogle);
+    if(d.status === 'accepted' || d.status === 'ok'){
+      toast('初回同期を開始しました。進捗はダッシュボードで確認できます。');
+      // Poll for sync progress while running
+      const pollProgress = setInterval(async ()=>{
+        try{
+          const s = await api('/sync-status/'+encodeURIComponent(currentUserId));
+          if(s.status !== 'running'){
+            clearInterval(pollProgress);
+            loadAll();
+            toast(s.status === 'completed' ? '初回同期が完了しました' : '初回同期が失敗しました: '+(s.error||'不明'));
+          } else {
+            loadSyncStatus();
+          }
+        }catch(e){ clearInterval(pollProgress); }
+      }, 5000);
     } else {
       toast('初回同期失敗: '+(d.error||'不明'));
     }
@@ -390,7 +451,7 @@ async function triggerWatchRenew(){
   try{
     const r = await fetch('/admin/watch/renew', {
       method: 'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();
