@@ -95,9 +95,31 @@ export function dashboardHtml(): string {
   <div id="errorsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
 </div>
 
-<!-- Logs -->
+<!-- Persistent Logs (Firestore) -->
+<div class="card" style="margin-bottom:16px" id="persistentLogsCard">
+  <h2>同期ログ <span style="font-size:.75rem;color:var(--muted)">(Firestore 永続化)</span></h2>
+  <div id="logStats" style="margin-bottom:12px"></div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+    <select id="logFilterStatus" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:4px;font-size:.82rem">
+      <option value="">すべての状態</option>
+      <option value="success">成功</option>
+      <option value="failure">失敗</option>
+      <option value="skipped">スキップ</option>
+    </select>
+    <select id="logFilterSource" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:4px;font-size:.82rem">
+      <option value="">すべてのソース</option>
+      <option value="google">Google</option>
+      <option value="lineworks">LINE WORKS</option>
+    </select>
+    <button onclick="loadPersistentLogs(true)" style="padding:4px 12px">検索</button>
+  </div>
+  <div id="persistentLogsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
+  <div id="logsPagination" style="margin-top:8px;text-align:center"></div>
+</div>
+
+<!-- In-memory Logs -->
 <div class="card" style="margin-bottom:16px" id="logsCard">
-  <h2>同期ログ <span style="font-size:.75rem;color:var(--muted)">(直近100件・メモリ内)</span></h2>
+  <h2>メモリ内ログ <span style="font-size:.75rem;color:var(--muted)">(直近100件・再起動で消失)</span></h2>
   <div id="logsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
 </div>
 
@@ -376,11 +398,94 @@ async function loadLogs(){
   }
 }
 
+let logNextCursor = null;
+
+async function loadLogStats(){
+  try{
+    const d = await api('/log-stats');
+    const total = d.total || 0;
+    $('logStats').innerHTML =
+      '<div style="display:flex;gap:16px;flex-wrap:wrap">'
+      +'<span>合計: <strong>'+total+'</strong></span>'
+      +'<span>'+badge(d.success+' 成功','ok')+'</span>'
+      +'<span>'+badge(d.failure+' 失敗','err')+'</span>'
+      +'<span>'+badge(d.skipped+' スキップ','off')+'</span>'
+      +'</div>';
+  }catch(e){
+    $('logStats').innerHTML = '';
+  }
+}
+
+async function loadPersistentLogs(reset){
+  if(reset) logNextCursor = null;
+  const status = $('logFilterStatus').value;
+  const source = $('logFilterSource').value;
+  let url = '/persistent-logs?limit=50';
+  if(status) url += '&status='+encodeURIComponent(status);
+  if(source) url += '&source='+encodeURIComponent(source);
+  if(logNextCursor) url += '&before='+encodeURIComponent(logNextCursor);
+
+  try{
+    const d = await api(url);
+    if(!d.logs || !d.logs.length){
+      if(reset || !logNextCursor){
+        $('persistentLogsBody').innerHTML = '<div class="empty">ログはまだありません</div>';
+      }
+      $('logsPagination').innerHTML = '';
+      return;
+    }
+    let html = '<table><tr><th>日時</th><th>アクション</th><th>状態</th><th>ソース</th><th>イベントID</th><th>詳細 / エラー</th></tr>';
+    for(const l of d.logs){
+      const time = l.timestamp ? new Date(l.timestamp).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '-';
+      const statusBadge = l.status === 'success' ? badge('OK','ok')
+                        : l.status === 'failure' ? badge('ERR','err')
+                        : badge('SKIP','off');
+      const detail = l.error ? '<span style="color:var(--red)">'+esc(l.error)+'</span>'
+                   : l.details ? esc(JSON.stringify(l.details).slice(0,120))
+                   : '-';
+      html += '<tr>'
+        +'<td style="white-space:nowrap">'+esc(time)+'</td>'
+        +'<td>'+esc(l.action||'-')+'</td>'
+        +'<td>'+statusBadge+'</td>'
+        +'<td>'+esc(l.source||'-')+'</td>'
+        +'<td>'+esc(l.eventId||'-')+'</td>'
+        +'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">'+detail+'</td>'
+        +'</tr>';
+    }
+    html += '</table>';
+
+    if(reset || !logNextCursor){
+      $('persistentLogsBody').innerHTML = html;
+    } else {
+      // Append rows to existing table
+      const existing = $('persistentLogsBody').querySelector('table');
+      if(existing){
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        const rows = temp.querySelectorAll('tr');
+        for(let i=1; i<rows.length; i++) existing.appendChild(rows[i]);
+      } else {
+        $('persistentLogsBody').innerHTML = html;
+      }
+    }
+
+    logNextCursor = d.nextCursor;
+    if(d.nextCursor){
+      $('logsPagination').innerHTML = '<button onclick="loadPersistentLogs(false)" style="padding:4px 16px">さらに読み込む</button>';
+    } else {
+      $('logsPagination').innerHTML = '<span style="color:var(--muted);font-size:.8rem">すべてのログを表示しました</span>';
+    }
+  }catch(e){
+    $('persistentLogsBody').innerHTML = '<div class="empty">永続ログの読み込みに失敗しました</div>';
+    $('logsPagination').innerHTML = '';
+  }
+}
+
 async function loadAll(){
   $('lastRefresh').textContent = '更新中...';
   await Promise.all([loadStatus(), loadUsers()]);
   // after status/users resolve we have currentUserId
-  await Promise.all([loadWatch(), loadSyncStatus(), loadMappings(), loadErrors(), loadLogs()]);
+  await Promise.all([loadWatch(), loadSyncStatus(), loadMappings(), loadErrors(), loadLogs(), loadLogStats(), loadPersistentLogs(true)]);
   $('lastRefresh').textContent = '最終更新: ' + new Date().toLocaleTimeString();
 }
 

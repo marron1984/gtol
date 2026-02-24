@@ -11,6 +11,34 @@ export interface LogEntry {
 const MAX_LOG_BUFFER = 200;
 const logBuffer: LogEntry[] = [];
 
+// ---------------------------------------------------------------------------
+// Firestore persistence (fire-and-forget)
+// ---------------------------------------------------------------------------
+const SYNC_LOGS_COLLECTION = 'sync_logs';
+let firestoreEnabled = true;
+
+function persistToFirestore(entry: LogEntry): void {
+  if (!firestoreEnabled) return;
+  try {
+    // Lazy require to avoid circular dependency (firestore.ts → logger.ts)
+    const { getFirestore } = require('../db/firestore') as typeof import('../db/firestore');
+    const db = getFirestore();
+    db.collection(SYNC_LOGS_COLLECTION)
+      .add(entry)
+      .catch(() => {
+        // Temporarily disable on write failure, re-enable after 60s
+        firestoreEnabled = false;
+        setTimeout(() => { firestoreEnabled = true; }, 60_000);
+      });
+  } catch {
+    // Ignore errors during Firestore initialization
+  }
+}
+
+// ---------------------------------------------------------------------------
+// In-memory buffer
+// ---------------------------------------------------------------------------
+
 function pushToBuffer(entry: LogEntry): void {
   logBuffer.push(entry);
   if (logBuffer.length > MAX_LOG_BUFFER) {
@@ -18,7 +46,7 @@ function pushToBuffer(entry: LogEntry): void {
   }
 }
 
-/** Return the most recent log entries (newest first). */
+/** Return the most recent log entries (newest first) from the in-memory buffer. */
 export function getRecentLogs(limit = 100): LogEntry[] {
   return logBuffer.slice(-limit).reverse();
 }
@@ -36,6 +64,7 @@ export const logger = {
       ...details,
     };
     pushToBuffer(entry);
+    persistToFirestore(entry);
     console.log(formatLog(entry));
   },
 
@@ -49,6 +78,7 @@ export const logger = {
       ...details,
     };
     pushToBuffer(entry);
+    persistToFirestore(entry);
     console.error(formatLog(entry));
   },
 
@@ -60,6 +90,7 @@ export const logger = {
       ...details,
     };
     pushToBuffer(entry);
+    persistToFirestore(entry);
     console.log(formatLog(entry));
   },
 };

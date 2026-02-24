@@ -1,11 +1,12 @@
 import { Firestore } from '@google-cloud/firestore';
 import { EventMapping, SyncStatus, UserConfig } from '../types';
-import { logger } from '../utils/logger';
+import { logger, LogEntry } from '../utils/logger';
 
 const MAPPINGS_COLLECTION = 'event_mappings';
 const USERS_COLLECTION = 'user_configs';
 const ERROR_QUEUE_COLLECTION = 'error_queue';
 const SYNC_STATUS_COLLECTION = 'sync_status';
+const SYNC_LOGS_COLLECTION = 'sync_logs';
 
 let db: Firestore;
 
@@ -239,4 +240,66 @@ export async function getSyncStatus(userId: string): Promise<SyncStatus | null> 
 
   if (!doc.exists) return null;
   return doc.data() as SyncStatus;
+}
+
+// ---------------------------------------------------------------------------
+// Sync log operations (persistent logs in Firestore)
+// ---------------------------------------------------------------------------
+
+export interface SyncLogQueryOptions {
+  limit?: number;
+  status?: 'success' | 'failure' | 'skipped';
+  source?: 'google' | 'lineworks';
+  /** ISO timestamp – return entries older than this (for pagination) */
+  before?: string;
+}
+
+export async function getSyncLogs(
+  options: SyncLogQueryOptions = {}
+): Promise<{ logs: LogEntry[]; nextCursor: string | null }> {
+  const limit = Math.min(options.limit || 50, 200);
+
+  let query: FirebaseFirestore.Query = getFirestore()
+    .collection(SYNC_LOGS_COLLECTION)
+    .orderBy('timestamp', 'desc');
+
+  if (options.status) {
+    query = query.where('status', '==', options.status);
+  }
+  if (options.source) {
+    query = query.where('source', '==', options.source);
+  }
+  if (options.before) {
+    query = query.where('timestamp', '<', options.before);
+  }
+
+  const snapshot = await query.limit(limit).get();
+
+  const logs = snapshot.docs.map((doc) => doc.data() as LogEntry);
+  const nextCursor = logs.length === limit ? logs[logs.length - 1].timestamp : null;
+
+  return { logs, nextCursor };
+}
+
+export async function getSyncLogStats(): Promise<{
+  total: number;
+  success: number;
+  failure: number;
+  skipped: number;
+}> {
+  const col = getFirestore().collection(SYNC_LOGS_COLLECTION);
+
+  const [totalSnap, successSnap, failureSnap, skippedSnap] = await Promise.all([
+    col.count().get(),
+    col.where('status', '==', 'success').count().get(),
+    col.where('status', '==', 'failure').count().get(),
+    col.where('status', '==', 'skipped').count().get(),
+  ]);
+
+  return {
+    total: totalSnap.data().count,
+    success: successSnap.data().count,
+    failure: failureSnap.data().count,
+    skipped: skippedSnap.data().count,
+  };
 }

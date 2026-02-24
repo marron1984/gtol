@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getFirestore, getUserConfig, getAllMappingsForUser, getErrorQueue, getSyncStatus } from '../db/firestore';
+import { getFirestore, getUserConfig, getAllMappingsForUser, getErrorQueue, getSyncStatus, getSyncLogs, getSyncLogStats } from '../db/firestore';
 import { getRecentLogs } from '../utils/logger';
 
 const router = Router();
@@ -121,6 +121,41 @@ router.get('/logs', async (_req, res) => {
     const limit = Math.min(parseInt(String(_req.query.limit ?? '100'), 10), 200);
     const logs = getRecentLogs(limit);
     res.json({ count: logs.length, logs });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/** GET /dashboard/api/persistent-logs – logs from Firestore (persistent) */
+router.get('/persistent-logs', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit ?? '50'), 10), 200);
+    const status = req.query.status as string | undefined;
+    const source = req.query.source as string | undefined;
+    const before = req.query.before as string | undefined;
+
+    const result = await getSyncLogs({
+      limit,
+      status: status as 'success' | 'failure' | 'skipped' | undefined,
+      source: source as 'google' | 'lineworks' | undefined,
+      before,
+    });
+
+    res.json({
+      count: result.logs.length,
+      logs: result.logs,
+      nextCursor: result.nextCursor,
+    });
+  } catch (error) {
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+/** GET /dashboard/api/log-stats – aggregate log statistics from Firestore */
+router.get('/log-stats', async (_req, res) => {
+  try {
+    const stats = await getSyncLogStats();
+    res.json(stats);
   } catch (error) {
     res.status(500).json({ error: String(error) });
   }
