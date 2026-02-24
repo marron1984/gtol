@@ -183,12 +183,16 @@ function authHeaders(){
   return h;
 }
 
-async function api(path){
+async function api(path, timeoutMs){
   const sep = path.includes('?') ? '&' : '?';
   const url = ADMIN_KEY ? API + path + sep + 'apiKey=' + encodeURIComponent(ADMIN_KEY) : API + path;
-  const r = await fetch(url);
-  if(!r.ok) throw new Error('API error: ' + r.status);
-  return r.json();
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=> ctrl.abort(), timeoutMs || 15000);
+  try{
+    const r = await fetch(url, {signal: ctrl.signal});
+    if(!r.ok) throw new Error('API error: ' + r.status);
+    return r.json();
+  }finally{ clearTimeout(timer); }
 }
 
 async function loadStatus(){
@@ -483,9 +487,10 @@ async function loadPersistentLogs(reset){
 
 async function loadAll(){
   $('lastRefresh').textContent = '更新中...';
-  await Promise.all([loadStatus(), loadUsers()]);
-  // after status/users resolve we have currentUserId
-  await Promise.all([loadWatch(), loadSyncStatus(), loadMappings(), loadErrors(), loadLogs(), loadLogStats(), loadPersistentLogs(true)]);
+  try{ await Promise.all([loadStatus(), loadUsers()]); }catch(e){}
+  // after status/users resolve we have currentUserId – fire remaining in parallel, don't block each other
+  const tasks = [loadWatch(), loadSyncStatus(), loadMappings(), loadErrors(), loadLogs(), loadLogStats(), loadPersistentLogs(true)];
+  await Promise.allSettled(tasks);
   $('lastRefresh').textContent = '最終更新: ' + new Date().toLocaleTimeString();
 }
 
