@@ -42,6 +42,11 @@ export function dashboardHtml(): string {
   .refresh-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
   .refresh-row button{background:transparent;color:var(--accent);border:1px solid var(--accent);font-weight:500}
   .time-ago{color:var(--muted);font-size:.8rem}
+  .progress-bar{background:var(--border);border-radius:6px;height:20px;overflow:hidden;margin:8px 0}
+  .progress-bar-fill{height:100%;border-radius:6px;transition:width .3s;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#0f172a;min-width:2em}
+  .progress-bar-fill.ok{background:var(--green)}
+  .progress-bar-fill.warn{background:var(--yellow)}
+  .progress-bar-fill.err{background:var(--red)}
 </style>
 </head>
 <body>
@@ -66,6 +71,12 @@ export function dashboardHtml(): string {
   </div>
 </div>
 
+<!-- Sync Progress -->
+<div class="card" style="margin-bottom:16px" id="syncCard">
+  <h2>初回同期の進捗</h2>
+  <div id="syncBody"><div class="empty">データなし</div></div>
+</div>
+
 <!-- Users -->
 <div class="card" style="margin-bottom:16px" id="usersCard">
   <h2>ユーザー設定</h2>
@@ -84,6 +95,34 @@ export function dashboardHtml(): string {
   <div id="errorsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
 </div>
 
+<!-- Persistent Logs (Firestore) -->
+<div class="card" style="margin-bottom:16px" id="persistentLogsCard">
+  <h2>同期ログ <span style="font-size:.75rem;color:var(--muted)">(Firestore 永続化)</span></h2>
+  <div id="logStats" style="margin-bottom:12px"></div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+    <select id="logFilterStatus" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:4px;font-size:.82rem">
+      <option value="">すべての状態</option>
+      <option value="success">成功</option>
+      <option value="failure">失敗</option>
+      <option value="skipped">スキップ</option>
+    </select>
+    <select id="logFilterSource" style="background:var(--bg);color:var(--text);border:1px solid var(--border);padding:4px 8px;border-radius:4px;font-size:.82rem">
+      <option value="">すべてのソース</option>
+      <option value="google">Google</option>
+      <option value="lineworks">LINE WORKS</option>
+    </select>
+    <button onclick="loadPersistentLogs(true)" style="padding:4px 12px">検索</button>
+  </div>
+  <div id="persistentLogsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
+  <div id="logsPagination" style="margin-top:8px;text-align:center"></div>
+</div>
+
+<!-- In-memory Logs -->
+<div class="card" style="margin-bottom:16px" id="logsCard">
+  <h2>メモリ内ログ <span style="font-size:.75rem;color:var(--muted)">(直近100件・再起動で消失)</span></h2>
+  <div id="logsBody"><div class="empty"><span class="spinner"></span> 読み込み中...</div></div>
+</div>
+
 <!-- Actions -->
 <div class="card">
   <h2>アクション</h2>
@@ -98,6 +137,7 @@ export function dashboardHtml(): string {
 
 <script>
 const API = '/dashboard/api';
+const ADMIN_KEY = new URLSearchParams(location.search).get('apiKey') || '';
 let currentUserId = null;
 
 function $(id){ return document.getElementById(id); }
@@ -137,9 +177,22 @@ function relTime(iso){
   return Math.floor(hrs/24)+'日前';
 }
 
-async function api(path){
-  const r = await fetch(API + path);
-  return r.json();
+function authHeaders(){
+  const h = {'Content-Type':'application/json'};
+  if(ADMIN_KEY) h['Authorization'] = 'Bearer ' + ADMIN_KEY;
+  return h;
+}
+
+async function api(path, timeoutMs){
+  const sep = path.includes('?') ? '&' : '?';
+  const url = ADMIN_KEY ? API + path + sep + 'apiKey=' + encodeURIComponent(ADMIN_KEY) : API + path;
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=> ctrl.abort(), timeoutMs || 15000);
+  try{
+    const r = await fetch(url, {signal: ctrl.signal});
+    if(!r.ok) throw new Error('API error: ' + r.status);
+    return r.json();
+  }finally{ clearTimeout(timer); }
 }
 
 async function loadStatus(){
@@ -237,6 +290,56 @@ async function loadMappings(){
   }
 }
 
+function fmtDuration(sec){
+  if(sec==null) return '-';
+  const m=Math.floor(sec/60), s=sec%60;
+  if(m<1) return s+'秒';
+  return m+'分'+s+'秒';
+}
+
+async function loadSyncStatus(){
+  if(!currentUserId){
+    $('syncBody').innerHTML = '<div class="empty">ユーザーIDがありません</div>';
+    return;
+  }
+  try{
+    const d = await api('/sync-status/'+encodeURIComponent(currentUserId));
+    if(!d.active && !d.status){
+      $('syncBody').innerHTML = '<div class="empty">初回同期の記録がありません</div>';
+      return;
+    }
+    const isRunning = d.status === 'running';
+    const isFailed = d.status === 'failed';
+    const phaseLabel = 'Phase ' + d.phase + (d.phase===1?' (Google → LW)':' (LW → Google)');
+    const done = d.phase===1 ? d.googleToLw : d.lwToGoogle;
+    const pct = d.phaseTotal > 0 ? Math.round((done/d.phaseTotal)*100) : 0;
+    const barClass = isFailed ? 'err' : (pct < 50 ? 'warn' : 'ok');
+    const statusBadge = isRunning ? badge('実行中','ok')
+                      : isFailed ? badge('失敗','err')
+                      : badge('完了','ok');
+
+    let html = kv('状態','') + kv('フェーズ', phaseLabel);
+    // inject badge
+    html = html.replace(/<span class="v"><\/span>/, '<span class="v">'+statusBadge+'</span>');
+
+    if(isRunning || isFailed){
+      html += '<div class="progress-bar"><div class="progress-bar-fill '+barClass+'" style="width:'+Math.max(pct,2)+'%">'+pct+'%</div></div>';
+      html += kv('成功', done + ' / ' + d.phaseTotal);
+      html += kv('失敗', String(d.phaseFailed));
+      html += kv('経過時間', fmtDuration(d.elapsedSec));
+    } else {
+      html += kv('Google → LW', d.googleToLw + ' 件');
+      html += kv('LW → Google', d.lwToGoogle + ' 件');
+    }
+    html += kv('最終更新', relTime(d.updatedAt));
+    if(d.error) html += kv('エラー', d.error);
+
+    $('syncBody').innerHTML = html;
+  }catch(e){
+    $('syncBody').innerHTML = '<div class="empty">同期状態の読み込みに失敗しました</div>';
+  }
+}
+
 async function loadErrors(){
   if(!currentUserId){
     $('errorsBody').innerHTML = '<div class="empty">ユーザーIDがありません</div>';
@@ -267,11 +370,127 @@ async function loadErrors(){
   }
 }
 
+async function loadLogs(){
+  try{
+    const d = await api('/logs?limit=100');
+    if(!d.logs || !d.logs.length){
+      $('logsBody').innerHTML = '<div class="empty">ログはまだありません</div>';
+      return;
+    }
+    let html = '<table><tr><th>時刻</th><th>アクション</th><th>状態</th><th>ソース</th><th>イベントID</th><th>詳細 / エラー</th></tr>';
+    for(const l of d.logs){
+      const time = l.timestamp ? new Date(l.timestamp).toLocaleTimeString() : '-';
+      const statusBadge = l.status === 'success' ? badge('OK','ok')
+                        : l.status === 'failure' ? badge('ERR','err')
+                        : badge('SKIP','off');
+      const detail = l.error ? '<span style="color:var(--red)">'+esc(l.error)+'</span>'
+                   : l.details ? esc(JSON.stringify(l.details).slice(0,120))
+                   : '-';
+      html += '<tr>'
+        +'<td style="white-space:nowrap">'+esc(time)+'</td>'
+        +'<td>'+esc(l.action||'-')+'</td>'
+        +'<td>'+statusBadge+'</td>'
+        +'<td>'+esc(l.source||'-')+'</td>'
+        +'<td>'+esc(l.eventId||'-')+'</td>'
+        +'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">'+detail+'</td>'
+        +'</tr>';
+    }
+    html += '</table>';
+    $('logsBody').innerHTML = html;
+  }catch(e){
+    $('logsBody').innerHTML = '<div class="empty">ログの読み込みに失敗しました</div>';
+  }
+}
+
+let logNextCursor = null;
+
+async function loadLogStats(){
+  try{
+    const d = await api('/log-stats');
+    const total = d.total || 0;
+    $('logStats').innerHTML =
+      '<div style="display:flex;gap:16px;flex-wrap:wrap">'
+      +'<span>合計: <strong>'+total+'</strong></span>'
+      +'<span>'+badge(d.success+' 成功','ok')+'</span>'
+      +'<span>'+badge(d.failure+' 失敗','err')+'</span>'
+      +'<span>'+badge(d.skipped+' スキップ','off')+'</span>'
+      +'</div>';
+  }catch(e){
+    $('logStats').innerHTML = '';
+  }
+}
+
+async function loadPersistentLogs(reset){
+  if(reset) logNextCursor = null;
+  const status = $('logFilterStatus').value;
+  const source = $('logFilterSource').value;
+  let url = '/persistent-logs?limit=50';
+  if(status) url += '&status='+encodeURIComponent(status);
+  if(source) url += '&source='+encodeURIComponent(source);
+  if(logNextCursor) url += '&before='+encodeURIComponent(logNextCursor);
+
+  try{
+    const d = await api(url);
+    if(!d.logs || !d.logs.length){
+      if(reset || !logNextCursor){
+        $('persistentLogsBody').innerHTML = '<div class="empty">ログはまだありません</div>';
+      }
+      $('logsPagination').innerHTML = '';
+      return;
+    }
+    let html = '<table><tr><th>日時</th><th>アクション</th><th>状態</th><th>ソース</th><th>イベントID</th><th>詳細 / エラー</th></tr>';
+    for(const l of d.logs){
+      const time = l.timestamp ? new Date(l.timestamp).toLocaleString('ja-JP',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '-';
+      const statusBadge = l.status === 'success' ? badge('OK','ok')
+                        : l.status === 'failure' ? badge('ERR','err')
+                        : badge('SKIP','off');
+      const detail = l.error ? '<span style="color:var(--red)">'+esc(l.error)+'</span>'
+                   : l.details ? esc(JSON.stringify(l.details).slice(0,120))
+                   : '-';
+      html += '<tr>'
+        +'<td style="white-space:nowrap">'+esc(time)+'</td>'
+        +'<td>'+esc(l.action||'-')+'</td>'
+        +'<td>'+statusBadge+'</td>'
+        +'<td>'+esc(l.source||'-')+'</td>'
+        +'<td>'+esc(l.eventId||'-')+'</td>'
+        +'<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">'+detail+'</td>'
+        +'</tr>';
+    }
+    html += '</table>';
+
+    if(reset || !logNextCursor){
+      $('persistentLogsBody').innerHTML = html;
+    } else {
+      // Append rows to existing table
+      const existing = $('persistentLogsBody').querySelector('table');
+      if(existing){
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        const rows = temp.querySelectorAll('tr');
+        for(let i=1; i<rows.length; i++) existing.appendChild(rows[i]);
+      } else {
+        $('persistentLogsBody').innerHTML = html;
+      }
+    }
+
+    logNextCursor = d.nextCursor;
+    if(d.nextCursor){
+      $('logsPagination').innerHTML = '<button onclick="loadPersistentLogs(false)" style="padding:4px 16px">さらに読み込む</button>';
+    } else {
+      $('logsPagination').innerHTML = '<span style="color:var(--muted);font-size:.8rem">すべてのログを表示しました</span>';
+    }
+  }catch(e){
+    $('persistentLogsBody').innerHTML = '<div class="empty">永続ログの読み込みに失敗しました</div>';
+    $('logsPagination').innerHTML = '';
+  }
+}
+
 async function loadAll(){
   $('lastRefresh').textContent = '更新中...';
-  await Promise.all([loadStatus(), loadUsers()]);
-  // after status/users resolve we have currentUserId
-  await Promise.all([loadWatch(), loadMappings(), loadErrors()]);
+  try{ await Promise.all([loadStatus(), loadUsers()]); }catch(e){}
+  // after status/users resolve we have currentUserId – fire remaining in parallel, don't block each other
+  const tasks = [loadWatch(), loadSyncStatus(), loadMappings(), loadErrors(), loadLogs(), loadLogStats(), loadPersistentLogs(true)];
+  await Promise.allSettled(tasks);
   $('lastRefresh').textContent = '最終更新: ' + new Date().toLocaleTimeString();
 }
 
@@ -282,7 +501,7 @@ async function triggerPoll(){
   try{
     const r = await fetch('/poll', {
       method: 'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();
@@ -304,12 +523,25 @@ async function triggerInitialSync(){
   try{
     const r = await fetch('/admin/initial-sync', {
       method: 'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();
-    if(d.status === 'ok'){
-      toast('初回同期完了: G→LW='+d.googleToLw+' LW→G='+d.lwToGoogle);
+    if(d.status === 'accepted' || d.status === 'ok'){
+      toast('初回同期を開始しました。進捗はダッシュボードで確認できます。');
+      // Poll for sync progress while running
+      const pollProgress = setInterval(async ()=>{
+        try{
+          const s = await api('/sync-status/'+encodeURIComponent(currentUserId));
+          if(s.status !== 'running'){
+            clearInterval(pollProgress);
+            loadAll();
+            toast(s.status === 'completed' ? '初回同期が完了しました' : '初回同期が失敗しました: '+(s.error||'不明'));
+          } else {
+            loadSyncStatus();
+          }
+        }catch(e){ clearInterval(pollProgress); }
+      }, 5000);
     } else {
       toast('初回同期失敗: '+(d.error||'不明'));
     }
@@ -329,7 +561,7 @@ async function triggerWatchRenew(){
   try{
     const r = await fetch('/admin/watch/renew', {
       method: 'POST',
-      headers:{'Content-Type':'application/json'},
+      headers: authHeaders(),
       body: JSON.stringify({ userId: currentUserId }),
     });
     const d = await r.json();

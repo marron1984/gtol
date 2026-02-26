@@ -13,7 +13,7 @@ gcloud run deploy cal-sync \
   --image="$IMAGE" \
   --region="$REGION" \
   --platform=managed \
-  --allow-unauthenticated=false \
+  --no-allow-unauthenticated \
   --port=8080 \
   --memory=256Mi \
   --min-instances=0 \
